@@ -40,6 +40,11 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         await page.mouse.wheel(0, action.y);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return;
+      case 'scrollTo':
+        await page.locator(action.target.value).scrollIntoViewIfNeeded({ timeout: timeoutMs });
+        await waitForTarget(page, action.target, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return;
       default:
         throw new VideoGeneratorError(
           'UNSUPPORTED_SCRIPT_ACTION',
@@ -136,6 +141,7 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
     case 'waitFor':
       return 'INVALID_WAIT_TARGET';
     case 'scroll':
+    case 'scrollTo':
       return 'INVALID_SCROLL_Y';
   }
 }
@@ -152,6 +158,8 @@ function describeAction(action: BrowserAction): string {
       return `waitFor ${describeWaitTarget(action.target)}`;
     case 'scroll':
       return `scroll y=${action.y}`;
+    case 'scrollTo':
+      return `scrollTo ${describeWaitTarget(action.target)}`;
   }
 }
 

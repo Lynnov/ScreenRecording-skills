@@ -112,6 +112,10 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
       }
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
+    case 'scrollTo':
+      validateSelectorWaitTarget(action.target, segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
     default:
       throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', 'Unsupported browser action type.', segmentId);
   }
@@ -125,6 +129,12 @@ function hasTextOrSelector(action: { text?: unknown; selector?: unknown }): bool
 function validateOptionalWaitFor(waitFor: unknown, segmentId: string | undefined): void {
   if (waitFor !== undefined) {
     validateWaitTarget(waitFor, segmentId);
+  }
+}
+
+function validateSelectorWaitTarget(target: unknown, segmentId: string | undefined): void {
+  if (!isRecord(target) || target.type !== 'selector' || typeof target.value !== 'string' || !target.value.trim()) {
+    throw new VideoGeneratorError('INVALID_WAIT_TARGET', 'ScrollTo target must be a selector wait target.', segmentId);
   }
 }
 

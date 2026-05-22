@@ -111,6 +111,25 @@ test('executeBrowserAction scrolls by wheel delta', async () => {
   });
 });
 
+test('executeBrowserAction scrolls until selector is visible', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main style="height: 2400px">
+        <div style="height: 1800px">Top</div>
+        <a class="target-card" href="/details">抽屉式礼盒</a>
+      </main>
+    `);
+
+    await executeBrowserAction(page, {
+      type: 'scrollTo',
+      target: { type: 'selector', value: '.target-card' },
+    }, 1000);
+
+    assert.ok(await page.locator('.target-card').isVisible());
+    assert.ok(await page.evaluate('window.scrollY > 0'));
+  });
+});
+
 test('executeBrowserAction uses specific error codes for action failures', async () => {
   await withPage(async (page) => {
     await page.setContent('<button>Exists</button>');

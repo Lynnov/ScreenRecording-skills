@@ -9,7 +9,8 @@ export type BrowserAction =
   | { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget }
   | { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget }
   | { type: 'waitFor'; target: WaitTarget }
-  | { type: 'scroll'; y: number; waitFor?: WaitTarget };
+  | { type: 'scroll'; y: number; waitFor?: WaitTarget }
+  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget };
 
 export interface TimelineSegmentAssets {
   audioPath?: string;
@@ -32,9 +33,15 @@ export interface TimelineSegment {
   assets: TimelineSegmentAssets;
 }
 
+export interface TimelineAssets {
+  continuousClipPath?: string;
+  [key: string]: unknown;
+}
+
 export interface Timeline {
   version: 1;
   title: string;
+  assets?: TimelineAssets;
   segments: TimelineSegment[];
 }
 
