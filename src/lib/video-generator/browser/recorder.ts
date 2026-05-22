@@ -52,7 +52,7 @@ export async function recordTimelineSegments({
       const actionStartedAtMs = monotonicNowMs();
       for (const action of segment.actions) {
         currentAction = action;
-        await executeBrowserAction(page, action, config.actionTimeoutMs);
+        page = await executeBrowserAction(page, action, config.actionTimeoutMs);
         await waitForPageStable(page, config.actionTimeoutMs);
       }
       const actionDurationMs = monotonicNowMs() - actionStartedAtMs;

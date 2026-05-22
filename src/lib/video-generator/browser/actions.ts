@@ -1,7 +1,7 @@
 import type { Locator, Page } from 'playwright';
 import { VideoGeneratorError, type BrowserAction, type WaitTarget } from '../types.js';
 
-export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<void> {
+export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<Page> {
   try {
     switch (action.type) {
       case 'goto':
@@ -11,8 +11,9 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           throw new VideoGeneratorError('INVALID_GOTO_URL', `Goto action failed url=${action.url}: ${errorMessage(error)}`);
         }
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
-        return;
-      case 'click':
+        return page;
+      case 'click': {
+        const popupPromise = page.waitForEvent('popup', { timeout: timeoutMs }).catch(() => undefined);
         if (action.text !== undefined) {
           await page.getByText(action.text, { exact: true }).click({ timeout: timeoutMs });
         } else if (action.selector !== undefined) {
@@ -20,8 +21,10 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         } else {
           throw new VideoGeneratorError('INVALID_CLICK_TARGET', 'click action requires text or selector.');
         }
-        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
-        return;
+        const nextPage = await popupPromise ?? page;
+        await waitForOptionalTarget(nextPage, action.waitFor, timeoutMs);
+        return nextPage;
+      }
       case 'fill':
         if (action.selector !== undefined) {
           await fillLocator(page.locator(action.selector), action.value, timeoutMs);
@@ -31,20 +34,20 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           throw new VideoGeneratorError('INVALID_FILL_TARGET', 'fill action requires text or selector.');
         }
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
-        return;
+        return page;
       case 'waitFor':
         await waitForTarget(page, action.target, timeoutMs);
-        return;
+        return page;
       case 'scroll':
         await page.mouse.move((page.viewportSize()?.width ?? 0) / 2, (page.viewportSize()?.height ?? 0) / 2);
         await page.mouse.wheel(0, action.y);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
-        return;
+        return page;
       case 'scrollTo':
         await page.locator(action.target.value).scrollIntoViewIfNeeded({ timeout: timeoutMs });
         await waitForTarget(page, action.target, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
-        return;
+        return page;
       default:
         throw new VideoGeneratorError(
           'UNSUPPORTED_SCRIPT_ACTION',

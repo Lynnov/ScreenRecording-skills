@@ -35,7 +35,7 @@
 - Test: `tests/video-generator/types.unit.test.ts`
 - Test: `tests/video-generator/config.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，覆盖顶层连续录制资产和 1920×1080 默认视口**
+- [x] **Step 1: 写失败测试，覆盖顶层连续录制资产和 1920×1080 默认视口**
 
 在 `tests/video-generator/types.unit.test.ts` 中新增：
 
@@ -73,13 +73,13 @@ test('timeline supports top-level continuous recording assets', () => {
 assert.deepEqual(config.viewport, { width: 1920, height: 1080 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts`
 
 Expected: FAIL，原因包括 `Timeline` 没有 `assets` 字段、`BrowserAction` 没有 `scrollTo`，或默认 viewport 仍是旧尺寸。
 
-- [ ] **Step 3: 修改类型和默认配置**
+- [x] **Step 3: 修改类型和默认配置**
 
 在 `src/lib/video-generator/types.ts` 中新增：
 
@@ -114,13 +114,13 @@ viewport: {
 },
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/types.ts src/lib/video-generator/config.ts tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts
@@ -135,7 +135,7 @@ git commit -m "feat: add continuous recording timeline assets"
 - Modify: `src/lib/video-generator/script-parser.ts:62-99`
 - Modify: `tests/video-generator/script-parser.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/script-parser.unit.test.ts` 中新增：
 
@@ -159,13 +159,13 @@ test('parseVideoScript parses selector wait and scroll-to-selector actions', () 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: FAIL，报 `Unsupported script action: 等待选择器 ...`。
 
-- [ ] **Step 3: 实现解析**
+- [x] **Step 3: 实现解析**
 
 在 `parseAction` 中，放在普通 `等待` 和普通 `向下滚动` 之前：
 
@@ -181,13 +181,13 @@ if (scrollToSelectorMatch) {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/script-parser.ts tests/video-generator/script-parser.unit.test.ts
@@ -202,7 +202,7 @@ git commit -m "feat: parse selector wait and scroll actions"
 - Modify: `src/lib/video-generator/browser/actions.ts:4-173`
 - Modify: `tests/video-generator/browser-actions.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/browser-actions.unit.test.ts` 中新增：
 
@@ -227,13 +227,13 @@ test('executeBrowserAction scrolls until selector is visible', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/browser-actions.unit.test.ts`
 
 Expected: FAIL，原因是 `Unsupported action type: scrollTo`。
 
-- [ ] **Step 3: 实现动作执行**
+- [x] **Step 3: 实现动作执行**
 
 在 `executeBrowserAction` 的 switch 中新增：
 
@@ -259,13 +259,13 @@ case 'scrollTo':
   return `scrollTo ${describeWaitTarget(action.target)}`;
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/browser-actions.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/browser/actions.ts tests/video-generator/browser-actions.unit.test.ts
@@ -280,7 +280,7 @@ git commit -m "feat: execute scroll-to-selector actions"
 - Modify: `src/lib/video-generator/browser/recorder.ts:14-208`
 - Modify: `tests/video-generator/browser-recorder.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，证明多段只生成一个连续 clip**
+- [x] **Step 1: 写失败测试，证明多段只生成一个连续 clip**
 
 在 `tests/video-generator/browser-recorder.unit.test.ts` 中新增：
 
@@ -332,13 +332,13 @@ test('recordTimelineSegments records multiple segments into one continuous clip'
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: FAIL，原因是 `updated.assets` 不存在，且不同 segment 仍各自生成 clip。
 
-- [ ] **Step 3: 重写 recorder 主流程**
+- [x] **Step 3: 重写 recorder 主流程**
 
 在 `src/lib/video-generator/browser/recorder.ts` 中保留目录创建和错误截图逻辑，但把主流程改为：
 
@@ -426,7 +426,7 @@ export async function recordTimelineSegments({ timeline, config, outputDir }: Re
 
 删除不再使用的 `preparedHtmlDir`、`statePath`、`recordSegment`、`showPreparedPage`、`snapshotPreparedHtml` 相关逻辑。
 
-- [ ] **Step 4: 调整受影响旧测试**
+- [x] **Step 4: 调整受影响旧测试**
 
 在 `tests/video-generator/browser-recorder.unit.test.ts` 中：
 
@@ -434,13 +434,13 @@ export async function recordTimelineSegments({ timeline, config, outputDir }: Re
 - 删除或改写 prepared-html 相关断言，因为连续录制不再写 prepared DOM。
 - 保留失败截图测试，确认截图来自 live page。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/lib/video-generator/browser/recorder.ts tests/video-generator/browser-recorder.unit.test.ts
@@ -455,7 +455,7 @@ git commit -m "refactor: record video scripts continuously"
 - Modify: `src/lib/video-generator/ffmpeg.ts:28-80`
 - Modify: `tests/video-generator/ffmpeg.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/ffmpeg.unit.test.ts` 中新增：
 
@@ -478,13 +478,13 @@ test('renderFinalVideo uses top-level continuous clip when available', async () 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/ffmpeg.unit.test.ts`
 
 Expected: FAIL，concat list 仍包含两个 segment clip。
 
-- [ ] **Step 3: 实现 continuous clip 优先**
+- [x] **Step 3: 实现 continuous clip 优先**
 
 在 `renderFinalVideo` 中把 `clipPaths` 生成逻辑改为：
 
@@ -500,13 +500,13 @@ const clipPaths = input.timeline.assets?.continuousClipPath !== undefined
     });
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/ffmpeg.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/ffmpeg.ts tests/video-generator/ffmpeg.unit.test.ts
@@ -521,7 +521,7 @@ git commit -m "feat: render continuous recording clips"
 - Modify: `src/lib/video-generator/subtitles.ts:1-39`
 - Modify: `tests/video-generator/subtitles.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/subtitles.unit.test.ts` 中新增：
 
@@ -553,13 +553,13 @@ test('renderSrt normalizes subtitle punctuation without changing timing', () => 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/subtitles.unit.test.ts`
 
 Expected: FAIL，字幕仍包含 `，` 和 `。`。
 
-- [ ] **Step 3: 实现字幕规范化**
+- [x] **Step 3: 实现字幕规范化**
 
 在 `src/lib/video-generator/subtitles.ts` 中新增：
 
@@ -585,13 +585,13 @@ segment.subtitle,
 normalizeSubtitleText(segment.subtitle),
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/subtitles.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/subtitles.ts tests/video-generator/subtitles.unit.test.ts
@@ -606,7 +606,7 @@ git commit -m "feat: normalize generated subtitles"
 - Modify: `examples/video-generator/pacdora-dieline.md:1-24`
 - Modify: `tests/video-generator/script-parser.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，防止示例直接跳详情 URL**
+- [x] **Step 1: 写失败测试，防止示例直接跳详情 URL**
 
 在 `tests/video-generator/script-parser.unit.test.ts` 中新增：
 
@@ -626,13 +626,13 @@ test('Pacdora example scrolls to drawer gift box card before opening detail page
 import { readFile } from 'node:fs/promises';
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: FAIL，因为示例仍直接打开详情 URL。
 
-- [ ] **Step 3: 更新示例脚本**
+- [x] **Step 3: 更新示例脚本**
 
 把 `examples/video-generator/pacdora-dieline.md` 改为：
 
@@ -665,13 +665,13 @@ Expected: FAIL，因为示例仍直接打开详情 URL。
 旁白：确认页面已经生成三百乘三百乘一百毫米的内尺寸刀版。
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add examples/video-generator/pacdora-dieline.md tests/video-generator/script-parser.unit.test.ts
@@ -691,23 +691,23 @@ git commit -m "test: enforce visible Pacdora card navigation"
 - Modify: `tests/video-generator/cli.unit.test.ts`
 - Modify: `tests/video-generator/browser-recorder.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，覆盖配置和 CLI 参数**
+- [x] **Step 1: 写失败测试，覆盖配置和 CLI 参数**
 
 在 `tests/video-generator/config.unit.test.ts` 增加断言：`loadVideoGeneratorConfig({ storageStatePath: 'auth/state.json' }).storageStatePath` 等于该路径。
 
 在 `tests/video-generator/cli.unit.test.ts` 增加测试：调用 `runVideoGeneratorCli(['--script', 'demo.md', '--output', 'out', '--storage-state', 'auth/state.json'], { runVideoGenerator })`，断言 `runVideoGenerator` 收到 `configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' }`。
 
-- [ ] **Step 2: 写失败测试，覆盖 recorder 使用 storage state**
+- [x] **Step 2: 写失败测试，覆盖 recorder 使用 storage state**
 
 在 `tests/video-generator/browser-recorder.unit.test.ts` 增加测试：创建本地 HTTP server，写入一个 Playwright storage state JSON，包含目标 origin 的 cookie 或 localStorage；timeline 打开该 server 页面，页面显示 cookie/localStorage 内容；调用 `recordTimelineSegments` 时传入 `config.storageStatePath`，断言录制成功且页面能看到登录态标记。
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: FAIL，原因是类型/config/CLI/recorder 尚未支持 `storageStatePath`。
 
-- [ ] **Step 4: 实现配置和 CLI**
+- [x] **Step 4: 实现配置和 CLI**
 
 在 `VideoGeneratorConfig` 增加可选字段：
 
@@ -723,7 +723,7 @@ storageStatePath?: string;
 - `runVideoGeneratorCli` 调用 pipeline 时传入 `{ outputDir, storageStatePath }`，未提供的字段不要写入。
 - `usage()` 增加 `--storage-state <file>`。
 
-- [ ] **Step 5: 实现 recorder 加载 storage state**
+- [x] **Step 5: 实现 recorder 加载 storage state**
 
 在 `recordTimelineSegments` 创建 context 时：
 
@@ -737,19 +737,19 @@ context = await browser.newContext({
 
 如果 Playwright 因文件不存在或格式错误抛错，沿用现有失败报告路径即可，但错误信息应包含原始错误摘要。
 
-- [ ] **Step 6: 运行测试确认通过**
+- [x] **Step 6: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 7: 运行全量基础测试**
+- [x] **Step 7: 运行全量基础测试**
 
 Run: `npm run test`
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/lib/video-generator/types.ts src/lib/video-generator/config.ts src/cli/video-generator.ts src/lib/video-generator/browser/recorder.ts tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts
@@ -764,31 +764,31 @@ git commit -m "feat: load storage state for recordings"
 - No code files unless validation exposes a bug.
 - Runtime output: `video-runs/pacdora-dieline/`
 
-- [ ] **Step 1: 运行基础测试**
+- [x] **Step 1: 运行基础测试**
 
 Run: `npm run test`
 
 Expected: `# fail 0`，所有测试通过。
 
-- [ ] **Step 2: 运行 Pacdora 真实录制**
+- [x] **Step 2: 运行 Pacdora 真实录制**
 
 Run: `npm run video:generate -- --script examples/video-generator/pacdora-dieline.md --output video-runs/pacdora-dieline`
 
 Expected: 输出 `Video generated: video-runs\pacdora-dieline\final.mp4`。
 
-- [ ] **Step 3: 检查生成报告**
+- [x] **Step 3: 检查生成报告**
 
 Run: `node -e "const r=require('./video-runs/pacdora-dieline/run-report.json'); if(!r.ok) throw new Error(JSON.stringify(r)); console.log(r.finalVideoPath)"`
 
 Expected: 输出 `video-runs\pacdora-dieline\final.mp4`。
 
-- [ ] **Step 4: 检查视频文件存在**
+- [x] **Step 4: 检查视频文件存在**
 
 Run: `ls -lh "video-runs/pacdora-dieline/final.mp4"`
 
 Expected: 文件存在且大小大于 0。
 
-- [ ] **Step 5: 检查字幕规范化结果**
+- [x] **Step 5: 检查字幕规范化结果**
 
 Run: `node -e "const fs=require('fs'); const s=fs.readFileSync('video-runs/pacdora-dieline/subtitles.srt','utf8'); if(/[。，,]/.test(s)) throw new Error(s); console.log('subtitles normalized')"`
 
