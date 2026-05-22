@@ -12,7 +12,7 @@ export function renderSrt(timeline: Timeline): string {
       return [
         String(index + 1),
         `${formatSrtTimestamp(startMs)} --> ${formatSrtTimestamp(endMs)}`,
-        segment.subtitle,
+        normalizeSubtitleText(segment.subtitle),
         '',
       ].join('\n');
     })
@@ -21,6 +21,14 @@ export function renderSrt(timeline: Timeline): string {
 
 function segmentDurationMs(segment: TimelineSegment): number {
   return (segment.actualAudioDurationMs ?? segment.estimatedDurationMs) + segment.bufferMs;
+}
+
+function normalizeSubtitleText(text: string): string {
+  return text
+    .replaceAll('。', '')
+    .replace(/[，,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function formatSrtTimestamp(totalMs: number): string {
