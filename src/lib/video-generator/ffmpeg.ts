@@ -29,13 +29,15 @@ export async function renderFinalVideo(input: RenderFinalVideoInput): Promise<st
   const runCommand = input.runCommand ?? defaultRunCommand;
   const finalVideoPath = path.join(input.outputDir, 'final.mp4');
   const concatListPath = path.join(input.outputDir, 'concat-list.txt');
-  const clipPaths = input.timeline.segments.map((segment) => {
-    if (segment.assets.clipPath === undefined) {
-      throw new VideoGeneratorError('FFMPEG_FAILED', `Cannot render final video because segment ${segment.id} is missing a clip path.`);
-    }
+  const clipPaths = input.timeline.assets?.continuousClipPath !== undefined
+    ? [input.timeline.assets.continuousClipPath]
+    : input.timeline.segments.map((segment) => {
+        if (segment.assets.clipPath === undefined) {
+          throw new VideoGeneratorError('FFMPEG_FAILED', `Cannot render final video because segment ${segment.id} is missing a clip path.`);
+        }
 
-    return segment.assets.clipPath;
-  });
+        return segment.assets.clipPath;
+      });
 
   await assertFfmpegAvailable(runCommand);
   await mkdir(input.outputDir, { recursive: true });

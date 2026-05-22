@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { AddressInfo } from 'node:net';
@@ -28,6 +28,19 @@ async function readVideoDimensions(videoPath: string): Promise<{ width: number; 
   ]);
   const [width, height] = result.stdout.trim().split('x').map(Number);
   return { width: width ?? 0, height: height ?? 0 };
+}
+
+async function readVideoDurationMs(videoPath: string): Promise<number> {
+  const result = await execFileAsync('ffprobe', [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration',
+    '-of',
+    'default=noprint_wrappers=1:nokey=1',
+    videoPath,
+  ]);
+  return Number.parseFloat(result.stdout.trim()) * 1000;
 }
 
 function makeConfig(outputDir: string): VideoGeneratorConfig {
@@ -78,6 +91,43 @@ async function withStateServer(run: (baseUrl: string) => Promise<void>): Promise
   try {
     const address = server.address() as AddressInfo;
     await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error?: Error) => error ? reject(error) : resolve());
+    });
+  }
+}
+
+async function withGapTimingServer(run: (baseUrl: string, getSecondRequestDelayMs: () => number | undefined) => Promise<void>): Promise<void> {
+  let firstRequestAtMs: number | undefined;
+  let secondRequestDelayMs: number | undefined;
+
+  const server = createServer((request, response) => {
+    if (request.url === '/first') {
+      firstRequestAtMs = Date.now();
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<main><h1>First</h1></main>');
+      return;
+    }
+
+    if (request.url === '/second') {
+      if (firstRequestAtMs !== undefined) {
+        secondRequestDelayMs = Date.now() - firstRequestAtMs;
+      }
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<main><h1>Second</h1></main>');
+      return;
+    }
+
+    response.writeHead(404);
+    response.end('Not found');
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    await run(`http://127.0.0.1:${address.port}`, () => secondRequestDelayMs);
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error?: Error) => error ? reject(error) : resolve());
@@ -146,7 +196,53 @@ async function withPreparedDomServer(run: (url: string) => Promise<void>): Promi
   }
 }
 
-test('recordTimelineSegments records one clip per segment', async () => {
+test('recordTimelineSegments records multiple segments into one continuous clip', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-continuous-'));
+
+  try {
+    const timeline: Timeline = {
+      version: 1,
+      title: 'Continuous recorder',
+      segments: [
+        {
+          id: 'open',
+          sourceText: 'open',
+          narration: 'open',
+          subtitle: 'open',
+          estimatedDurationMs: 250,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><h1>Open</h1><button>Next</button></main>'), waitFor: { type: 'text', value: 'Open' } },
+          ],
+          assets: {},
+        },
+        {
+          id: 'click',
+          sourceText: 'click',
+          narration: 'click',
+          subtitle: 'click',
+          estimatedDurationMs: 250,
+          bufferMs: 0,
+          actions: [
+            { type: 'click', text: 'Next' },
+          ],
+          assets: {},
+        },
+      ],
+    };
+
+    const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+
+    assert.equal(typeof updated.assets?.continuousClipPath, 'string');
+    assert.ok(existsSync(updated.assets?.continuousClipPath as string));
+    assert.equal(updated.segments[0]?.assets.clipPath, updated.assets?.continuousClipPath);
+    assert.equal(updated.segments[1]?.assets.clipPath, updated.assets?.continuousClipPath);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments assigns continuous clip to each segment', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-'));
 
   try {
@@ -195,6 +291,102 @@ test('recordTimelineSegments records one clip per segment', async () => {
   }
 });
 
+test('recordTimelineSegments waits explicit gaps and preserves relative timestamps', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-gap-'));
+
+  try {
+    await withGapTimingServer(async (baseUrl, getSecondRequestDelayMs) => {
+      const timeline: Timeline = {
+        version: 1,
+        title: 'Recorder gaps',
+        segments: [
+          {
+            id: 'first',
+            sourceText: 'first',
+            narration: 'first',
+            subtitle: 'first',
+            estimatedDurationMs: 200,
+            bufferMs: 0,
+            startsAtMs: 0,
+            endsAtMs: 200,
+            actions: [
+              { type: 'goto', url: `${baseUrl}/first`, waitFor: { type: 'text', value: 'First' } },
+            ],
+            assets: {},
+          },
+          {
+            id: 'second',
+            sourceText: 'second',
+            narration: 'second',
+            subtitle: 'second',
+            estimatedDurationMs: 200,
+            bufferMs: 0,
+            startsAtMs: 700,
+            endsAtMs: 900,
+            actions: [
+              { type: 'goto', url: `${baseUrl}/second`, waitFor: { type: 'text', value: 'Second' } },
+            ],
+            assets: {},
+          },
+        ],
+      };
+
+      const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+      const clipPath = updated.assets?.continuousClipPath;
+
+      assert.equal(updated.segments[0]?.startsAtMs, 0);
+      assert.equal(updated.segments[0]?.endsAtMs, 200);
+      assert.equal(updated.segments[1]?.startsAtMs, 700);
+      assert.equal(updated.segments[1]?.endsAtMs, 900);
+      assert.equal(typeof clipPath, 'string');
+      assert.ok(existsSync(clipPath as string));
+      assert.ok((getSecondRequestDelayMs() ?? 0) >= 600, `expected second action after timeline gap, got ${getSecondRequestDelayMs()}ms`);
+
+      const durationMs = await readVideoDurationMs(clipPath as string);
+      assert.ok(durationMs >= 700, `expected recording to include timeline gap, got ${durationMs}ms`);
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments does not extend timeline metadata by action duration', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-action-duration-'));
+
+  try {
+    const timeline: Timeline = {
+      version: 1,
+      title: 'Recorder action duration',
+      segments: [
+        {
+          id: 'slow-action',
+          sourceText: 'slow',
+          narration: 'slow',
+          subtitle: 'slow',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><h1>Slow</h1><script>setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<p>Ready</p>\'), 600)</script></main>'), waitFor: { type: 'text', value: 'Ready' } },
+          ],
+          assets: {},
+        },
+      ],
+    };
+
+    const startedAtMs = Date.now();
+    const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+    const elapsedMs = Date.now() - startedAtMs;
+    const clipPath = updated.assets?.continuousClipPath;
+
+    assert.equal(updated.segments[0]?.startsAtMs, 0);
+    assert.equal(updated.segments[0]?.endsAtMs, 200);
+    assert.equal(typeof clipPath, 'string');
+    assert.ok(elapsedMs < 1100, `expected action time not to receive an extra full segment wait, got ${elapsedMs}ms`);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('recordTimelineSegments records clips at configured viewport size', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-size-'));
 
@@ -231,7 +423,7 @@ test('recordTimelineSegments records clips at configured viewport size', async (
   }
 });
 
-test('recordTimelineSegments preserves prepared page storage across segment contexts', async () => {
+test('recordTimelineSegments preserves live page storage across continuous segments', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-state-'));
 
   try {
@@ -278,16 +470,15 @@ test('recordTimelineSegments preserves prepared page storage across segment cont
         assert.ok(existsSync(clipPath), `expected clip at ${clipPath}`);
       }
 
-      const state = JSON.parse(await readFile(join(outputDir, 'browser-state.json'), 'utf8')) as { cookies?: unknown[]; origins?: unknown[] };
-      assert.ok((state.cookies ?? []).length > 0);
-      assert.ok((state.origins ?? []).length > 0);
+      assert.equal(updated.segments[0]?.assets.clipPath, updated.assets?.continuousClipPath);
+      assert.equal(updated.segments[1]?.assets.clipPath, updated.assets?.continuousClipPath);
     });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
 });
 
-test('recordTimelineSegments records prepared DOM when action changes DOM without changing URL', async () => {
+test('recordTimelineSegments records live DOM changes without prepared HTML output', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-prepared-dom-'));
 
   try {
@@ -313,18 +504,13 @@ test('recordTimelineSegments records prepared DOM when action changes DOM withou
       };
 
       const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
-      const preparedHtmlPath = updated.segments[0]?.assets.preparedHtmlPath;
+      const continuousClipPath = updated.assets?.continuousClipPath;
+      const clipPath = updated.segments[0]?.assets.clipPath;
 
-      assert.equal(typeof preparedHtmlPath, 'string');
-      const preparedHtml = await readFile(preparedHtmlPath as string, 'utf8');
-      assert.match(preparedHtml, /Prepared without URL change/);
-      assert.match(preparedHtml, /value="prepared value"/);
-      assert.match(preparedHtml, />prepared notes<\/textarea>/);
-      assert.match(preparedHtml, /id="accepted"[^>]*checked/);
-      assert.match(preparedHtml, new RegExp(`<base href="${url}"`));
-      assert.match(preparedHtml, /data-prepared-scroll-y="350"/);
-      assert.doesNotMatch(preparedHtml, /slow-replay\.js/);
-      assert.doesNotMatch(preparedHtml, /<script/u);
+      assert.equal(typeof continuousClipPath, 'string');
+      assert.equal(clipPath, continuousClipPath);
+      assert.ok(existsSync(continuousClipPath as string));
+      assert.equal(updated.segments[0]?.assets.preparedHtmlPath, undefined);
     });
   } finally {
     await rm(outputDir, { recursive: true, force: true });

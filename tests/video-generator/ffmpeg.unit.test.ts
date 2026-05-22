@@ -92,6 +92,23 @@ test('renderFinalVideo writes concat list and renders final mp4 with audio and s
   }
 });
 
+test('renderFinalVideo uses top-level continuous clip when available', async () => {
+  const outputDir = path.join(tmpdir(), `ffmpeg-continuous-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const timeline = makeTimeline();
+  timeline.assets = { continuousClipPath: '/clips/full.webm' };
+  const runCommand: RunCommand = async () => ({ stdout: '', stderr: '' });
+
+  try {
+    await renderFinalVideo({ timeline, outputDir, runCommand });
+
+    const concatList = await readFile(path.join(outputDir, 'concat-list.txt'), 'utf8');
+    assert.equal(concatList, "file '/clips/full.webm'\n");
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('renderFinalVideo normalizes Windows clip paths in concat list', async () => {
   const outputDir = path.join(tmpdir(), `ffmpeg-concat-${process.pid}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
