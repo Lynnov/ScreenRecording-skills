@@ -70,6 +70,11 @@ function parseAction(line: string): BrowserAction {
     return { type: 'goto', url: target === 'demo:basic' ? basicDemoDataUrl() : target };
   }
 
+  const clickSelectorMatch = line.match(/^点击选择器\s+(.+)$/u);
+  if (clickSelectorMatch) {
+    return { type: 'click', selector: stripWrappingQuotes(clickSelectorMatch[1]) };
+  }
+
   const clickMatch = line.match(/^点击\s+(.+)$/u);
   if (clickMatch) {
     return { type: 'click', text: stripWrappingQuotes(clickMatch[1]) };
@@ -94,6 +99,21 @@ function parseAction(line: string): BrowserAction {
 }
 
 function parseFillAction(line: string): BrowserAction | undefined {
+  if (line.startsWith('在选择器 ')) {
+    const afterSelectorPrefix = line.slice('在选择器 '.length).trimStart();
+    const separator = ' 输入 ';
+    const separatorIndex = afterSelectorPrefix.indexOf(separator);
+    if (separatorIndex < 0) {
+      return undefined;
+    }
+
+    return {
+      type: 'fill',
+      selector: stripWrappingQuotes(afterSelectorPrefix.slice(0, separatorIndex)),
+      value: stripWrappingQuotes(afterSelectorPrefix.slice(separatorIndex + separator.length)),
+    };
+  }
+
   if (!line.startsWith('在 ')) {
     return undefined;
   }

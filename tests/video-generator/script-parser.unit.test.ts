@@ -65,6 +65,18 @@ test('parseVideoScript parses quoted fill values that contain the separator word
   ]);
 });
 
+test('parseVideoScript parses selector click and fill actions for ambiguous pages', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：精确操作页面
+点击选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+在选择器 input.number-input-box.paInput >> nth=1 输入 300`, config);
+
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'click', selector: 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]' },
+    { type: 'fill', selector: 'input.number-input-box.paInput >> nth=1', value: '300' },
+  ]);
+});
+
 test('parseVideoScript maps built-in demo actions to a playable data URL', () => {
   const config = loadVideoGeneratorConfig();
 

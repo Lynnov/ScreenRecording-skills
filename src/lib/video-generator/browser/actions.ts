@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { Locator, Page } from 'playwright';
 import { VideoGeneratorError, type BrowserAction, type WaitTarget } from '../types.js';
 
 export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<void> {
@@ -24,7 +24,7 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         return;
       case 'fill':
         if (action.selector !== undefined) {
-          await page.locator(action.selector).fill(action.value, { timeout: timeoutMs });
+          await fillLocator(page.locator(action.selector), action.value, timeoutMs);
         } else if (action.text !== undefined) {
           await fillByText(page, action.text, action.value, timeoutMs);
         } else {
@@ -96,14 +96,27 @@ async function fillByText(page: Page, text: string, value: string, timeoutMs: nu
 
   if (labelCount > 0) {
     try {
-      await label.fill(value, { timeout: timeoutMs });
+      await fillLocator(label, value, timeoutMs);
       return;
     } catch (error) {
       throw new Error(`Failed to fill label ${text}: ${errorMessage(error)}`);
     }
   }
 
-  await page.getByPlaceholder(text).fill(value, { timeout: timeoutMs });
+  await fillLocator(page.getByPlaceholder(text), value, timeoutMs);
+}
+
+async function fillLocator(locator: Locator, value: string, timeoutMs: number): Promise<void> {
+  const isEditable = await locator.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
+    || element.isContentEditable, undefined, { timeout: timeoutMs });
+  if (!isEditable) {
+    throw new Error('Target is not editable.');
+  }
+
+  await locator.click({ timeout: timeoutMs });
+  await locator.page().keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await locator.page().keyboard.type(value);
+  await locator.page().keyboard.press('Tab');
 }
 
 async function waitForOptionalTarget(page: Page, target: WaitTarget | undefined, timeoutMs: number): Promise<void> {

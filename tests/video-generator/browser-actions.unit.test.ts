@@ -55,6 +55,29 @@ test('executeBrowserAction fills selector and text targets', async () => {
   });
 });
 
+test('executeBrowserAction commits filled selector values with keyboard events and blur', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <input id="width" value="200" />
+      <p id="committed">200</p>
+      <script>
+        const input = document.querySelector('#width');
+        input.addEventListener('keydown', () => input.dataset.typed = 'true');
+        input.addEventListener('change', () => {
+          if (input.dataset.typed === 'true') {
+            document.querySelector('#committed').textContent = input.value;
+          }
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'fill', selector: '#width', value: '300' }, 1000);
+
+    assert.equal(await page.locator('#width').inputValue(), '300');
+    assert.equal(await page.locator('#committed').innerText(), '300');
+  });
+});
+
 test('waitForTarget supports selector, url, and networkIdle', async () => {
   await withPage(async (page) => {
     await page.setContent(`

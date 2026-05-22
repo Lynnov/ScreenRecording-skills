@@ -187,11 +187,7 @@ async function snapshotPreparedHtml(page: Page): Promise<string> {
     base.setAttribute('href', window.location.href);
     document.head.prepend(base);
 
-    document.querySelector('#prepared-scroll-restorer')?.remove();
-    const scrollRestorer = document.createElement('script');
-    scrollRestorer.id = 'prepared-scroll-restorer';
-    scrollRestorer.textContent = 'requestAnimationFrame(() => window.scrollTo(' + scrollX + ', ' + scrollY + '));';
-    document.body.append(scrollRestorer);
+    document.querySelectorAll('script').forEach((script) => script.remove());
   `);
 
   return page.content();

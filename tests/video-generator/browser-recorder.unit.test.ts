@@ -93,6 +93,10 @@ async function withPreparedDomServer(run: (url: string) => Promise<void>): Promi
       return;
     }
 
+    if (request.url === '/slow-replay.js') {
+      return;
+    }
+
     if (request.url !== '/page') {
       response.writeHead(404);
       response.end('Not found');
@@ -120,6 +124,9 @@ async function withPreparedDomServer(run: (url: string) => Promise<void>): Promi
               document.querySelector('#accepted').checked = true;
               document.scrollingElement.scrollTop = 350;
               document.body.insertAdjacentHTML('beforeend', '<p id="prepared-marker" class="prepared-asset">Prepared without URL change</p>');
+              const slowScript = document.createElement('script');
+              slowScript.src = '/slow-replay.js';
+              document.body.append(slowScript);
             });
           </script>
         </body>
@@ -316,7 +323,8 @@ test('recordTimelineSegments records prepared DOM when action changes DOM withou
       assert.match(preparedHtml, /id="accepted"[^>]*checked/);
       assert.match(preparedHtml, new RegExp(`<base href="${url}"`));
       assert.match(preparedHtml, /data-prepared-scroll-y="350"/);
-      assert.match(preparedHtml, /window\.scrollTo\(0,\s*350\)/);
+      assert.doesNotMatch(preparedHtml, /slow-replay\.js/);
+      assert.doesNotMatch(preparedHtml, /<script/u);
     });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
