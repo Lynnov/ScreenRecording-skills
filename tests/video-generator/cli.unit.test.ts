@@ -53,6 +53,30 @@ test('runVideoGeneratorCli passes script and output args to pipeline', async () 
   assert.match(stdout.join('\n'), /final\.mp4/);
 });
 
+test('runVideoGeneratorCli passes storage state and output args to pipeline', async () => {
+  const { stdout, io } = makeIo();
+  const calls: Array<{ scriptPath: string; configOverrides?: unknown }> = [];
+
+  const exitCode = await runVideoGeneratorCli([
+    '--script',
+    'demo.md',
+    '--output',
+    'out',
+    '--storage-state',
+    'auth/state.json',
+  ], {
+    ...io,
+    runVideoGenerator: async (input) => {
+      calls.push({ scriptPath: input.scriptPath, configOverrides: input.configOverrides });
+      return { ok: true, outputDir: 'out', finalVideoPath: 'out/final.mp4' } satisfies RunReport;
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [{ scriptPath: 'demo.md', configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' } }]);
+  assert.match(stdout.join('\n'), /final\.mp4/);
+});
+
 test('runVideoGeneratorCli rejects missing flag values without treating flags as values', async () => {
   const missingScript = makeIo();
 

@@ -56,6 +56,7 @@ export interface VideoGeneratorConfig {
   ttsProvider: 'aliyun';
   subtitleMode: 'burn-in';
   outputDir: string;
+  storageStatePath?: string;
 }
 
 export interface RunReport {

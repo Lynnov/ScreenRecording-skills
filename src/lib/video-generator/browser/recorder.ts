@@ -31,6 +31,7 @@ export async function recordTimelineSegments({
     browser = await chromium.launch();
     context = await browser.newContext({
       viewport: config.viewport,
+      storageState: config.storageStatePath,
       recordVideo: { dir: videoDir, size: config.viewport },
     });
     page = await context.newPage();

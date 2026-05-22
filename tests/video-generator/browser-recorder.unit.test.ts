@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { AddressInfo } from 'node:net';
@@ -53,6 +53,31 @@ function makeConfig(outputDir: string): VideoGeneratorConfig {
     subtitleMode: 'burn-in',
     outputDir,
   };
+}
+
+async function withStorageStateServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/html' });
+    response.end(`
+      <main>
+        <h1 id="auth">Loading</h1>
+        <script>
+          document.querySelector('#auth').textContent = localStorage.getItem('video-generator-auth') + ':' + document.cookie;
+        </script>
+      </main>
+    `);
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error?: Error) => error ? reject(error) : resolve());
+    });
+  }
 }
 
 async function withStateServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
@@ -418,6 +443,72 @@ test('recordTimelineSegments records clips at configured viewport size', async (
 
     const dimensions = await readVideoDimensions(clipPath as string);
     assert.deepEqual(dimensions, config.viewport);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments loads Playwright storage state before recording', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-storage-state-'));
+
+  try {
+    await withStorageStateServer(async (baseUrl) => {
+      const storageStatePath = join(outputDir, 'storage-state.json');
+      await writeFile(storageStatePath, JSON.stringify({
+        cookies: [
+          {
+            name: 'video_generator_session',
+            value: 'cookie-authenticated',
+            domain: '127.0.0.1',
+            path: '/',
+            expires: -1,
+            httpOnly: false,
+            secure: false,
+            sameSite: 'Lax',
+          },
+        ],
+        origins: [
+          {
+            origin: baseUrl,
+            localStorage: [
+              { name: 'video-generator-auth', value: 'local-authenticated' },
+            ],
+          },
+        ],
+      }), 'utf8');
+
+      const timeline: Timeline = {
+        version: 1,
+        title: 'Recorder storage state',
+        segments: [
+          {
+            id: 'auth-state',
+            sourceText: 'auth',
+            narration: 'auth',
+            subtitle: 'auth',
+            estimatedDurationMs: 250,
+            bufferMs: 0,
+            actions: [
+              {
+                type: 'goto',
+                url: baseUrl,
+                waitFor: { type: 'text', value: 'local-authenticated:video_generator_session=cookie-authenticated' },
+              },
+            ],
+            assets: {},
+          },
+        ],
+      };
+      const config = makeConfig(outputDir);
+      config.storageStatePath = storageStatePath;
+
+      const updated = await recordTimelineSegments({ timeline, config, outputDir });
+      const clipPath = updated.assets?.continuousClipPath;
+
+      assert.equal(typeof clipPath, 'string');
+      assert.equal(updated.segments[0]?.assets.clipPath, clipPath);
+      assert.ok(existsSync(clipPath as string));
+    });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
