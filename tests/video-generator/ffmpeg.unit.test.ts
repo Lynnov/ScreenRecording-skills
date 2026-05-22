@@ -109,6 +109,36 @@ test('renderFinalVideo uses top-level continuous clip when available', async () 
   }
 });
 
+test('renderFinalVideo renders continuous recording from stable segment video ranges', async () => {
+  const outputDir = path.join(tmpdir(), `ffmpeg-continuous-ranges-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const timeline = makeTimeline();
+  timeline.assets = { continuousClipPath: '/clips/full.webm' };
+  timeline.segments[0]!.assets.videoStartMs = 1250;
+  timeline.segments[0]!.assets.videoEndMs = 2250;
+  timeline.segments[1]!.assets.videoStartMs = 4800;
+  timeline.segments[1]!.assets.videoEndMs = 5800;
+  const calls: Array<{ command: string; args: string[] }> = [];
+  const runCommand: RunCommand = async (command, args) => {
+    calls.push({ command, args });
+    return { stdout: '', stderr: '' };
+  };
+
+  try {
+    await renderFinalVideo({ timeline, outputDir, audioPath: '/audio/narration.wav', runCommand });
+
+    const renderArgs = calls[1]?.args ?? [];
+    assert.ok(renderArgs.includes('-filter_complex'));
+    assert.ok(renderArgs.includes('[0:v]trim=start=1.25:end=2.25,setpts=PTS-STARTPTS[v0];[0:v]trim=start=4.8:end=5.8,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1:a=0[trimmed];[trimmed]null[v]'));
+    assert.ok(renderArgs.includes('-map'));
+    assert.ok(renderArgs.includes('[v]'));
+    assert.ok(renderArgs.includes('-map'));
+    assert.ok(renderArgs.includes('1:a'));
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('renderFinalVideo normalizes Windows clip paths in concat list', async () => {
   const outputDir = path.join(tmpdir(), `ffmpeg-concat-${process.pid}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });

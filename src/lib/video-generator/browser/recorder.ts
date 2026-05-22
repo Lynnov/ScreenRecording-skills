@@ -38,15 +38,19 @@ export async function recordTimelineSegments({
 
     const recordedSegments: TimelineSegment[] = [];
     let cursorMs = 0;
+    let videoCursorMs = 0;
 
     for (const segment of timeline.segments) {
       currentSegment = segment;
       currentAction = undefined;
 
-      const startsAtMs = segment.startsAtMs ?? cursorMs;
+      const plannedStartsAtMs = segment.startsAtMs ?? cursorMs;
+      const startsAtMs = Math.max(plannedStartsAtMs, cursorMs);
       if (startsAtMs > cursorMs) {
-        await page.waitForTimeout(startsAtMs - cursorMs);
+        const gapMs = startsAtMs - cursorMs;
+        await page.waitForTimeout(gapMs);
         cursorMs = startsAtMs;
+        videoCursorMs += gapMs;
       }
 
       const actionStartedAtMs = monotonicNowMs();
@@ -56,23 +60,30 @@ export async function recordTimelineSegments({
         await waitForPageStable(page, config.actionTimeoutMs);
       }
       const actionDurationMs = monotonicNowMs() - actionStartedAtMs;
-      cursorMs += actionDurationMs;
+      videoCursorMs += actionDurationMs;
 
       const durationMs = calculateSegmentDurationMs({
         estimatedMs: segment.estimatedDurationMs,
         actualAudioMs: segment.actualAudioDurationMs,
         bufferMs: segment.bufferMs,
       });
-      const endsAtMs = segment.endsAtMs ?? startsAtMs + durationMs;
+      const plannedDurationMs = segment.endsAtMs !== undefined && segment.startsAtMs !== undefined
+        ? Math.max(0, segment.endsAtMs - segment.startsAtMs)
+        : durationMs;
+      const plannedEndsAtMs = startsAtMs + plannedDurationMs;
+      const endsAtMs = plannedEndsAtMs;
+      const videoStartMs = videoCursorMs;
+      const videoEndMs = videoStartMs + (endsAtMs - startsAtMs);
 
-      if (endsAtMs > cursorMs) {
-        await page.waitForTimeout(endsAtMs - cursorMs);
-        cursorMs = endsAtMs;
+      if (videoEndMs > videoCursorMs) {
+        await page.waitForTimeout(videoEndMs - videoCursorMs);
+        videoCursorMs = videoEndMs;
       }
+      cursorMs = endsAtMs;
 
       recordedSegments.push({
         ...segment,
-        assets: { ...segment.assets },
+        assets: { ...segment.assets, videoStartMs, videoEndMs },
         startsAtMs,
         endsAtMs,
       });
@@ -128,7 +139,6 @@ export async function recordTimelineSegments({
 
 async function waitForPageStable(page: Page, timeoutMs: number): Promise<void> {
   await page.waitForLoadState('domcontentloaded', { timeout: timeoutMs }).catch(() => undefined);
-  await page.waitForLoadState('networkidle', { timeout: timeoutMs }).catch(() => undefined);
 }
 
 async function captureFailureScreenshot(page: Page, screenshotPath: string): Promise<boolean> {

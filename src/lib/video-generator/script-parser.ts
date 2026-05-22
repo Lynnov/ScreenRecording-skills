@@ -90,6 +90,11 @@ function parseAction(line: string): BrowserAction {
     return { type: 'waitFor', target: { type: 'selector', value: stripWrappingQuotes(waitForSelectorMatch[1]) } };
   }
 
+  const waitForHiddenSelectorMatch = line.match(/^等待隐藏选择器\s+(.+)$/u);
+  if (waitForHiddenSelectorMatch) {
+    return { type: 'waitFor', target: { type: 'hiddenSelector', value: stripWrappingQuotes(waitForHiddenSelectorMatch[1]) } };
+  }
+
   const waitForMatch = line.match(/^等待\s+(.+)$/u);
   if (waitForMatch) {
     return { type: 'waitFor', target: { type: 'text', value: stripWrappingQuotes(waitForMatch[1]) } };

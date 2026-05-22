@@ -146,6 +146,7 @@ function validateWaitTarget(target: unknown, segmentId: string | undefined): voi
   switch (target.type) {
     case 'text':
     case 'selector':
+    case 'hiddenSelector':
     case 'url':
       if (typeof target.value !== 'string' || !target.value.trim()) {
         throw new VideoGeneratorError('INVALID_WAIT_TARGET', 'Wait target value must be a non-empty string.', segmentId);

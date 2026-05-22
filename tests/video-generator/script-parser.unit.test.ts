@@ -78,16 +78,21 @@ test('parseVideoScript parses selector click and fill actions for ambiguous page
   ]);
 });
 
-test('parseVideoScript parses selector wait and scroll-to-selector actions', () => {
+test('parseVideoScript parses selector wait, hidden wait, and scroll-to-selector actions', () => {
   const config = loadVideoGeneratorConfig();
   const timeline = parseVideoScript(`旁白：找到目标卡片
 等待选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+等待隐藏选择器 .loading-mask
 向下滚动到选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]`, config);
 
   assert.deepEqual(timeline.segments[0]?.actions, [
     {
       type: 'waitFor',
       target: { type: 'selector', value: 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]' },
+    },
+    {
+      type: 'waitFor',
+      target: { type: 'hiddenSelector', value: '.loading-mask' },
     },
     {
       type: 'scrollTo',
@@ -127,7 +132,10 @@ test('Pacdora example reveals the tray box card before opening its detail page',
   assert.notEqual(scrollIndex, -1);
   assert.notEqual(clickIndex, -1);
   assert.ok(scrollIndex < clickIndex);
+  assert.ok(actionLines.includes('等待选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]'));
+  assert.ok(actionLines.includes('等待隐藏选择器 text=构建模型'));
   assert.ok(actionLines.includes('点击选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]'));
+  assert.ok(actionLines.includes('等待选择器 input.number-input-box.paInput >> nth=0'));
   assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=0 输入 300'));
   assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=1 输入 300'));
   assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=2 输入 100'));

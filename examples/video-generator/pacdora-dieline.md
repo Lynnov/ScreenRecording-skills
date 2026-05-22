@@ -8,9 +8,12 @@
 旁白：在刀版模板列表中找到抽屉式礼盒卡片。
 
 点击选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+等待选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]
+等待隐藏选择器 text=构建模型
 旁白：点击抽屉式礼盒卡片进入详情页。
 
 点击选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]
+等待选择器 input.number-input-box.paInput >> nth=0
 旁白：将尺寸类型切换为内尺寸。
 
 在选择器 input.number-input-box.paInput >> nth=0 输入 300

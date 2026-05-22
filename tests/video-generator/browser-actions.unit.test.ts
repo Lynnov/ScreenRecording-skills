@@ -139,6 +139,24 @@ test('waitForTarget supports selector, url, and networkIdle', async () => {
   });
 });
 
+test('waitForTarget waits until all matching hidden selector targets disappear', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main>
+        <p>构建模型</p>
+        <span>构建模型</span>
+        <script>
+          setTimeout(() => document.querySelectorAll('p, span').forEach((element) => element.remove()), 100);
+        </script>
+      </main>
+    `);
+
+    await waitForTarget(page, { type: 'hiddenSelector', value: 'text=构建模型' }, 1000);
+
+    assert.equal(await page.locator('text=构建模型').count(), 0);
+  });
+});
+
 test('executeBrowserAction scrolls by wheel delta', async () => {
   await withPage(async (page) => {
     await page.setContent('<main style="height: 3000px"><h1>Scrollable</h1></main>');
@@ -169,7 +187,7 @@ test('executeBrowserAction scrolls until selector is visible', async () => {
   });
 });
 
-test('executeBrowserAction follows target blank links in the active page', async () => {
+test('executeBrowserAction opens target blank links in the same active page', async () => {
   await withServer(async (origin) => {
     await withPage(async (page) => {
       await page.setContent(`
@@ -182,7 +200,7 @@ test('executeBrowserAction follows target blank links in the active page', async
         waitFor: { type: 'text', value: 'Detail Page' },
       }, 1000);
 
-      assert.notEqual(activePage, page);
+      assert.equal(activePage, page);
       assert.equal(await activePage.getByText('Detail Page').count(), 1);
     });
   });

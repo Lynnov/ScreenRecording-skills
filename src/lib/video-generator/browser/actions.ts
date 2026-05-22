@@ -13,17 +13,24 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
       case 'click': {
-        const popupPromise = page.waitForEvent('popup', { timeout: timeoutMs }).catch(() => undefined);
+        let locator: Locator;
         if (action.text !== undefined) {
-          await page.getByText(action.text, { exact: true }).click({ timeout: timeoutMs });
+          locator = page.getByText(action.text, { exact: true });
         } else if (action.selector !== undefined) {
-          await page.locator(action.selector).click({ timeout: timeoutMs });
+          locator = page.locator(action.selector);
         } else {
           throw new VideoGeneratorError('INVALID_CLICK_TARGET', 'click action requires text or selector.');
         }
-        const nextPage = await popupPromise ?? page;
-        await waitForOptionalTarget(nextPage, action.waitFor, timeoutMs);
-        return nextPage;
+
+        const samePageHref = await targetBlankHref(locator, timeoutMs);
+        if (samePageHref !== undefined) {
+          await page.goto(samePageHref, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+        } else {
+          await locator.click({ timeout: timeoutMs });
+        }
+
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
       }
       case 'fill':
         if (action.selector !== undefined) {
@@ -75,6 +82,9 @@ export async function waitForTarget(page: Page, target: WaitTarget, timeoutMs: n
       case 'selector':
         await page.locator(target.value).waitFor({ state: 'visible', timeout: timeoutMs });
         return;
+      case 'hiddenSelector':
+        await waitForAllLocatorsHidden(page.locator(target.value), timeoutMs);
+        return;
       case 'url':
         if (!page.url().includes(target.value)) {
           await page.waitForURL((url) => url.toString().includes(target.value), { timeout: timeoutMs });
@@ -96,6 +106,31 @@ export async function waitForTarget(page: Page, target: WaitTarget, timeoutMs: n
       `Wait target failed (${describeWaitTarget(target)}): ${errorMessage(error)}`,
     );
   }
+}
+
+async function targetBlankHref(locator: Locator, timeoutMs: number): Promise<string | undefined> {
+  return locator.evaluate((element) => {
+    const anchor = element.closest('a');
+    return anchor?.target === '_blank' && anchor.href ? anchor.href : undefined;
+  }, undefined, { timeout: timeoutMs });
+}
+
+async function waitForAllLocatorsHidden(locator: Locator, timeoutMs: number): Promise<void> {
+  const startedAtMs = Date.now();
+  while (Date.now() - startedAtMs < timeoutMs) {
+    const count = await locator.count();
+    const visibility = await Promise.all(
+      Array.from({ length: count }, (_value, index) => locator.nth(index).isVisible({ timeout: Math.min(100, timeoutMs) })),
+    );
+
+    if (visibility.every((isVisible) => !isVisible)) {
+      return;
+    }
+
+    await locator.page().waitForTimeout(100);
+  }
+
+  throw new Error(`Timed out waiting for all matching locators to be hidden.`);
 }
 
 async function fillByText(page: Page, text: string, value: string, timeoutMs: number): Promise<void> {
@@ -172,6 +207,8 @@ function describeWaitTarget(target: WaitTarget): string {
       return `text=${target.value}`;
     case 'selector':
       return `selector=${target.value}`;
+    case 'hiddenSelector':
+      return `hiddenSelector=${target.value}`;
     case 'url':
       return `url=${target.value}`;
     case 'networkIdle':

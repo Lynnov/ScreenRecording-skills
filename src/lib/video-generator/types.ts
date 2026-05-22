@@ -1,6 +1,7 @@
 export type WaitTarget =
   | { type: 'text'; value: string }
   | { type: 'selector'; value: string }
+  | { type: 'hiddenSelector'; value: string }
   | { type: 'url'; value: string }
   | { type: 'networkIdle' };
 
@@ -16,6 +17,8 @@ export interface TimelineSegmentAssets {
   audioPath?: string;
   clipPath?: string;
   screenshotPath?: string;
+  videoStartMs?: number;
+  videoEndMs?: number;
   [key: string]: unknown;
 }
 
@@ -35,6 +38,7 @@ export interface TimelineSegment {
 
 export interface TimelineAssets {
   continuousClipPath?: string;
+  continuousClipStartOffsetMs?: number;
   [key: string]: unknown;
 }
 

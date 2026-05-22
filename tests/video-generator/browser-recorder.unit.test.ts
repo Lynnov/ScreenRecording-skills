@@ -3,7 +3,7 @@ import { promisify } from 'node:util';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { AddressInfo } from 'node:net';
@@ -153,6 +153,52 @@ async function withGapTimingServer(run: (baseUrl: string, getSecondRequestDelayM
   try {
     const address = server.address() as AddressInfo;
     await run(`http://127.0.0.1:${address.port}`, () => secondRequestDelayMs);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error?: Error) => error ? reject(error) : resolve());
+    });
+  }
+}
+
+async function withHangingResourceServer(run: (url: string) => Promise<void>): Promise<void> {
+  const server = createServer((request, response) => {
+    if (request.url === '/pending') {
+      return;
+    }
+
+    response.writeHead(200, { 'content-type': 'text/html' });
+    response.end('<main><h1>Ready</h1><script>fetch("/pending").catch(() => undefined)</script></main>');
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    await run(`http://127.0.0.1:${address.port}/page`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error?: Error) => error ? reject(error) : resolve());
+    });
+  }
+}
+
+async function withPopupNavigationServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
+  const server = createServer((request, response) => {
+    response.writeHead(200, { 'content-type': 'text/html' });
+
+    if (request.url === '/start') {
+      response.end('<main><h1>Start</h1><a href="/detail" target="_blank">Open detail</a></main>');
+      return;
+    }
+
+    response.end('<main><h1>Detail</h1></main>');
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+
+  try {
+    const address = server.address() as AddressInfo;
+    await run(`http://127.0.0.1:${address.port}`);
   } finally {
     await new Promise<void>((resolve, reject) => {
       server.close((error?: Error) => error ? reject(error) : resolve());
@@ -316,6 +362,43 @@ test('recordTimelineSegments assigns continuous clip to each segment', async () 
   }
 });
 
+test('recordTimelineSegments starts first segment after initial actions complete', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-initial-action-'));
+
+  try {
+    const timeline: Timeline = {
+      version: 1,
+      title: 'Initial action timing',
+      segments: [
+        {
+          id: 'intro',
+          sourceText: 'intro',
+          narration: 'intro',
+          subtitle: 'intro',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><h1>Loading</h1><script>setTimeout(() => document.querySelector(\'h1\').textContent = \'Ready\', 600)</script></main>'), waitFor: { type: 'text', value: 'Ready' } },
+          ],
+          assets: {},
+        },
+      ],
+    };
+
+    const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+
+    assert.equal(updated.segments[0]?.startsAtMs, 0);
+    assert.equal(updated.segments[0]?.endsAtMs, 200);
+    assert.ok((updated.segments[0]?.assets.videoStartMs ?? 0) >= 600);
+    assert.equal(
+      (updated.segments[0]?.assets.videoEndMs ?? 0) - (updated.segments[0]?.assets.videoStartMs ?? 0),
+      200,
+    );
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('recordTimelineSegments waits explicit gaps and preserves relative timestamps', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-gap-'));
 
@@ -363,6 +446,7 @@ test('recordTimelineSegments waits explicit gaps and preserves relative timestam
       assert.equal(updated.segments[0]?.endsAtMs, 200);
       assert.equal(updated.segments[1]?.startsAtMs, 700);
       assert.equal(updated.segments[1]?.endsAtMs, 900);
+      assert.ok((updated.segments[1]?.assets.videoStartMs ?? 0) >= 700);
       assert.equal(typeof clipPath, 'string');
       assert.ok(existsSync(clipPath as string));
       assert.ok((getSecondRequestDelayMs() ?? 0) >= 600, `expected second action after timeline gap, got ${getSecondRequestDelayMs()}ms`);
@@ -375,7 +459,107 @@ test('recordTimelineSegments waits explicit gaps and preserves relative timestam
   }
 });
 
-test('recordTimelineSegments does not extend timeline metadata by action duration', async () => {
+test('recordTimelineSegments does not wait for network idle after visible targets are ready', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-networkidle-'));
+
+  try {
+    await withHangingResourceServer(async (url) => {
+      const timeline: Timeline = {
+        version: 1,
+        title: 'Recorder hanging resource',
+        segments: [
+          {
+            id: 'ready-page',
+            sourceText: 'ready',
+            narration: 'ready',
+            subtitle: 'ready',
+            estimatedDurationMs: 200,
+            bufferMs: 0,
+            actions: [
+              { type: 'goto', url, waitFor: { type: 'text', value: 'Ready' } },
+            ],
+            assets: {},
+          },
+        ],
+      };
+      const config = makeConfig(outputDir);
+      config.actionTimeoutMs = 1500;
+
+      const startedAtMs = Date.now();
+      await recordTimelineSegments({ timeline, config, outputDir });
+      const elapsedMs = Date.now() - startedAtMs;
+
+      assert.ok(elapsedMs < 1000, `expected visible target readiness not to wait for network idle timeout, got ${elapsedMs}ms`);
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments shifts following segments when an action overruns narration timing', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-action-shift-'));
+
+  try {
+    const timeline: Timeline = {
+      version: 1,
+      title: 'Recorder action shift',
+      segments: [
+        {
+          id: 'intro',
+          sourceText: 'intro',
+          narration: 'intro',
+          subtitle: 'intro',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><h1>Intro</h1><button>Show</button><script>document.querySelector(\'button\').addEventListener(\'click\', () => setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<p>Ready</p>\'), 600))</script></main>'), waitFor: { type: 'text', value: 'Intro' } },
+          ],
+          assets: {},
+        },
+        {
+          id: 'slow-action',
+          sourceText: 'slow',
+          narration: 'slow',
+          subtitle: 'slow',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          startsAtMs: 200,
+          endsAtMs: 400,
+          actions: [
+            { type: 'click', text: 'Show', waitFor: { type: 'text', value: 'Ready' } },
+          ],
+          assets: {},
+        },
+        {
+          id: 'next-action',
+          sourceText: 'next',
+          narration: 'next',
+          subtitle: 'next',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          startsAtMs: 400,
+          endsAtMs: 600,
+          actions: [
+            { type: 'waitFor', target: { type: 'text', value: 'Ready' } },
+          ],
+          assets: {},
+        },
+      ],
+    };
+
+    const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+    const slowEndsAtMs = updated.segments[1]?.endsAtMs ?? 0;
+
+    assert.equal(slowEndsAtMs, 400);
+    assert.equal(updated.segments[2]?.startsAtMs, 400);
+    assert.equal(updated.segments[2]?.endsAtMs, 600);
+    assert.ok((updated.segments[1]?.assets.videoStartMs ?? 0) >= 800);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments extends segment timing when actions take longer than narration', async () => {
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-action-duration-'));
 
   try {
@@ -384,14 +568,28 @@ test('recordTimelineSegments does not extend timeline metadata by action duratio
       title: 'Recorder action duration',
       segments: [
         {
+          id: 'intro',
+          sourceText: 'intro',
+          narration: 'intro',
+          subtitle: 'intro',
+          estimatedDurationMs: 200,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><h1>Intro</h1><button>Show</button><script>document.querySelector(\'button\').addEventListener(\'click\', () => setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<p>Ready</p>\'), 600))</script></main>'), waitFor: { type: 'text', value: 'Intro' } },
+          ],
+          assets: {},
+        },
+        {
           id: 'slow-action',
           sourceText: 'slow',
           narration: 'slow',
           subtitle: 'slow',
           estimatedDurationMs: 200,
           bufferMs: 0,
+          startsAtMs: 200,
+          endsAtMs: 400,
           actions: [
-            { type: 'goto', url: demoDataUrl('<main><h1>Slow</h1><script>setTimeout(() => document.body.insertAdjacentHTML(\'beforeend\', \'<p>Ready</p>\'), 600)</script></main>'), waitFor: { type: 'text', value: 'Ready' } },
+            { type: 'click', text: 'Show', waitFor: { type: 'text', value: 'Ready' } },
           ],
           assets: {},
         },
@@ -403,10 +601,11 @@ test('recordTimelineSegments does not extend timeline metadata by action duratio
     const elapsedMs = Date.now() - startedAtMs;
     const clipPath = updated.assets?.continuousClipPath;
 
-    assert.equal(updated.segments[0]?.startsAtMs, 0);
-    assert.equal(updated.segments[0]?.endsAtMs, 200);
+    assert.equal(updated.segments[1]?.startsAtMs, 200);
+    assert.equal(updated.segments[1]?.endsAtMs, 400);
+    assert.ok((updated.segments[1]?.assets.videoStartMs ?? 0) >= 800);
     assert.equal(typeof clipPath, 'string');
-    assert.ok(elapsedMs < 1100, `expected action time not to receive an extra full segment wait, got ${elapsedMs}ms`);
+    assert.ok(elapsedMs < 1600, `expected action time not to receive an extra full segment wait, got ${elapsedMs}ms`);
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
@@ -561,6 +760,54 @@ test('recordTimelineSegments preserves live page storage across continuous segme
         assert.ok(existsSync(clipPath), `expected clip at ${clipPath}`);
       }
 
+      assert.equal(updated.segments[0]?.assets.clipPath, updated.assets?.continuousClipPath);
+      assert.equal(updated.segments[1]?.assets.clipPath, updated.assets?.continuousClipPath);
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('recordTimelineSegments keeps target blank navigation in one continuous clip', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-popup-'));
+
+  try {
+    await withPopupNavigationServer(async (baseUrl) => {
+      const timeline: Timeline = {
+        version: 1,
+        title: 'Popup navigation recorder',
+        segments: [
+          {
+            id: 'open-list',
+            sourceText: 'open',
+            narration: 'open',
+            subtitle: 'open',
+            estimatedDurationMs: 250,
+            bufferMs: 0,
+            actions: [
+              { type: 'goto', url: `${baseUrl}/start`, waitFor: { type: 'text', value: 'Start' } },
+            ],
+            assets: {},
+          },
+          {
+            id: 'open-detail',
+            sourceText: 'detail',
+            narration: 'detail',
+            subtitle: 'detail',
+            estimatedDurationMs: 250,
+            bufferMs: 0,
+            actions: [
+              { type: 'click', text: 'Open detail', waitFor: { type: 'text', value: 'Detail' } },
+            ],
+            assets: {},
+          },
+        ],
+      };
+
+      const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
+      const clipFiles = (await readdir(join(outputDir, 'clips'))).filter((file) => file.endsWith('.webm'));
+
+      assert.equal(clipFiles.length, 1);
       assert.equal(updated.segments[0]?.assets.clipPath, updated.assets?.continuousClipPath);
       assert.equal(updated.segments[1]?.assets.clipPath, updated.assets?.continuousClipPath);
     });
