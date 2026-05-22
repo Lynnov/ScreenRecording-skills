@@ -1,0 +1,21 @@
+{
+  "name": "scripted-browser-video-generator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scripted browser tutorial video generator with Playwright, TTS, subtitles, and ffmpeg rendering",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test tests/**/*.unit.test.ts",
+    "test:video-poc": "tsx --test tests/video-generator/playwright-video-poc.test.ts",
+    "test": "npm run typecheck && npm run test:unit",
+    "video:generate": "tsx src/cli/video-generator.ts",
+    "video:tts-smoke": "tsx src/cli/video-generator.ts --tts-smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "playwright": "^1.58.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
