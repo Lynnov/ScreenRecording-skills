@@ -19,8 +19,11 @@
 - Modify: `src/lib/video-generator/browser/recorder.ts` — 改为一个 context/page 连续录制整条 timeline。
 - Modify: `src/lib/video-generator/ffmpeg.ts` — 渲染时优先使用顶层 continuous clip，避免重复 concat 同一个 clip。
 - Modify: `src/lib/video-generator/subtitles.ts` — 字幕输出规范化。
+- Modify: `src/cli/video-generator.ts` — 解析 `--storage-state <file>` 并传入 pipeline。
+- Modify: `src/lib/video-generator/config.ts` — 增加可选 `storageStatePath` 配置。
+- Modify: `src/lib/video-generator/browser/recorder.ts` — 创建 context 时加载 Playwright storage state。
 - Modify: `examples/video-generator/pacdora-dieline.md` — 用真实滚动展示卡片后点击，不直接打开详情 URL。
-- Modify tests under `tests/video-generator/` — 覆盖类型、解析、动作、录制、渲染、字幕和示例脚本行为。
+- Modify tests under `tests/video-generator/` — 覆盖类型、解析、动作、录制、渲染、字幕、登录态和示例脚本行为。
 
 ---
 
@@ -677,7 +680,85 @@ git commit -m "test: enforce visible Pacdora card navigation"
 
 ---
 
-### Task 8: 真实录制验证和基础测试
+### Task 8: 支持加载 Playwright storage state 登录态
+
+**Files:**
+- Modify: `src/lib/video-generator/types.ts`
+- Modify: `src/lib/video-generator/config.ts`
+- Modify: `src/cli/video-generator.ts`
+- Modify: `src/lib/video-generator/browser/recorder.ts`
+- Modify: `tests/video-generator/config.unit.test.ts`
+- Modify: `tests/video-generator/cli.unit.test.ts`
+- Modify: `tests/video-generator/browser-recorder.unit.test.ts`
+
+- [ ] **Step 1: 写失败测试，覆盖配置和 CLI 参数**
+
+在 `tests/video-generator/config.unit.test.ts` 增加断言：`loadVideoGeneratorConfig({ storageStatePath: 'auth/state.json' }).storageStatePath` 等于该路径。
+
+在 `tests/video-generator/cli.unit.test.ts` 增加测试：调用 `runVideoGeneratorCli(['--script', 'demo.md', '--output', 'out', '--storage-state', 'auth/state.json'], { runVideoGenerator })`，断言 `runVideoGenerator` 收到 `configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' }`。
+
+- [ ] **Step 2: 写失败测试，覆盖 recorder 使用 storage state**
+
+在 `tests/video-generator/browser-recorder.unit.test.ts` 增加测试：创建本地 HTTP server，写入一个 Playwright storage state JSON，包含目标 origin 的 cookie 或 localStorage；timeline 打开该 server 页面，页面显示 cookie/localStorage 内容；调用 `recordTimelineSegments` 时传入 `config.storageStatePath`，断言录制成功且页面能看到登录态标记。
+
+- [ ] **Step 3: 运行测试确认失败**
+
+Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
+
+Expected: FAIL，原因是类型/config/CLI/recorder 尚未支持 `storageStatePath`。
+
+- [ ] **Step 4: 实现配置和 CLI**
+
+在 `VideoGeneratorConfig` 增加可选字段：
+
+```ts
+storageStatePath?: string;
+```
+
+`loadVideoGeneratorConfig` 保持浅合并即可。
+
+在 `src/cli/video-generator.ts`：
+- `ParsedArgs` 增加 `storageStatePath?: string`。
+- `parseArgs` 支持 `--storage-state <file>`。
+- `runVideoGeneratorCli` 调用 pipeline 时传入 `{ outputDir, storageStatePath }`，未提供的字段不要写入。
+- `usage()` 增加 `--storage-state <file>`。
+
+- [ ] **Step 5: 实现 recorder 加载 storage state**
+
+在 `recordTimelineSegments` 创建 context 时：
+
+```ts
+context = await browser.newContext({
+  viewport: config.viewport,
+  storageState: config.storageStatePath,
+  recordVideo: { dir: videoDir, size: config.viewport },
+});
+```
+
+如果 Playwright 因文件不存在或格式错误抛错，沿用现有失败报告路径即可，但错误信息应包含原始错误摘要。
+
+- [ ] **Step 6: 运行测试确认通过**
+
+Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
+
+Expected: PASS。
+
+- [ ] **Step 7: 运行全量基础测试**
+
+Run: `npm run test`
+
+Expected: PASS。
+
+- [ ] **Step 8: 提交**
+
+```bash
+git add src/lib/video-generator/types.ts src/lib/video-generator/config.ts src/cli/video-generator.ts src/lib/video-generator/browser/recorder.ts tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts
+git commit -m "feat: load storage state for recordings"
+```
+
+---
+
+### Task 9: 真实录制验证和基础测试
 
 **Files:**
 - No code files unless validation exposes a bug.
@@ -726,6 +807,6 @@ git commit -m "fix: stabilize continuous recording smoke test"
 
 ## 自检结果
 
-- Spec 覆盖：连续录制、1920×1080、页面内不重载、真实滚动点击 Pacdora 卡片、字幕规范化、错误报告和测试验证均有任务覆盖。
+- Spec 覆盖：连续录制、1920×1080、页面内不重载、真实滚动点击 Pacdora 卡片、字幕规范化、`--storage-state` 登录态加载、错误报告和测试验证均有任务覆盖。
 - 占位扫描：没有 `TBD`、`TODO`、`implement later` 或未展开的“类似上一步”。
 - 类型一致性：计划统一使用 `Timeline.assets.continuousClipPath`、`scrollTo` action、`WaitTarget` selector，后续任务引用与 Task 1 定义一致。

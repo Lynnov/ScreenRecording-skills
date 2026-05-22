@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { loadVideoGeneratorConfig } from '../../src/lib/video-generator/config.js';
 import { parseVideoScript } from '../../src/lib/video-generator/script-parser.js';
@@ -107,6 +108,31 @@ test('parseVideoScript maps built-in demo actions to a playable data URL', () =>
     assert.match(decodeURIComponent(action.url), /<button[^>]*>开始<\/button>/u);
     assert.match(decodeURIComponent(action.url), /placeholder="姓名"/u);
   }
+});
+
+test('Pacdora example reveals the tray box card before opening its detail page', async () => {
+  const script = await readFile('examples/video-generator/pacdora-dieline.md', 'utf8');
+  const detailUrl = 'https://www.pacdora.cn/dielines-detail/custom-dimensions-tray-boxes-dieline-128020';
+  const targetSelector = 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]';
+  const actionLines = script
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const scrollLine = `向下滚动到选择器 ${targetSelector}`;
+  const clickLine = `点击选择器 ${targetSelector}`;
+  const scrollIndex = actionLines.indexOf(scrollLine);
+  const clickIndex = actionLines.indexOf(clickLine);
+
+  assert.notEqual(scrollIndex, -1);
+  assert.notEqual(clickIndex, -1);
+  assert.ok(scrollIndex < clickIndex);
+  assert.ok(actionLines.includes('点击选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]'));
+  assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=0 输入 300'));
+  assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=1 输入 300'));
+  assert.ok(actionLines.includes('在选择器 input.number-input-box.paInput >> nth=2 输入 100'));
+  assert.ok(actionLines.includes('等待 300 × 300 × 100 mm'));
+  assert.ok(!actionLines.includes(`打开 ${detailUrl}`));
 });
 
 test('parseVideoScript rejects blocks without narration before returning a timeline', () => {

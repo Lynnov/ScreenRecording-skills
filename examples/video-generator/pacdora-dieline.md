@@ -4,8 +4,11 @@
 打开 https://www.pacdora.cn/dielines
 旁白：进入刀版模板页面。
 
-打开 https://www.pacdora.cn/dielines-detail/custom-dimensions-tray-boxes-dieline-128020
-旁白：选择抽屉式礼盒并打开详情页。
+向下滚动到选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+旁白：在刀版模板列表中找到抽屉式礼盒卡片。
+
+点击选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+旁白：点击抽屉式礼盒卡片进入详情页。
 
 点击选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]
 旁白：将尺寸类型切换为内尺寸。
