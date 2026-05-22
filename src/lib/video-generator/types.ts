@@ -1,6 +1,7 @@
 export type WaitTarget =
   | { type: 'text'; value: string }
   | { type: 'selector'; value: string }
+  | { type: 'hiddenSelector'; value: string }
   | { type: 'url'; value: string }
   | { type: 'networkIdle' };
 
@@ -9,12 +10,15 @@ export type BrowserAction =
   | { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget }
   | { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget }
   | { type: 'waitFor'; target: WaitTarget }
-  | { type: 'scroll'; y: number; waitFor?: WaitTarget };
+  | { type: 'scroll'; y: number; waitFor?: WaitTarget }
+  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget };
 
 export interface TimelineSegmentAssets {
   audioPath?: string;
   clipPath?: string;
   screenshotPath?: string;
+  videoStartMs?: number;
+  videoEndMs?: number;
   [key: string]: unknown;
 }
 
@@ -32,9 +36,16 @@ export interface TimelineSegment {
   assets: TimelineSegmentAssets;
 }
 
+export interface TimelineAssets {
+  continuousClipPath?: string;
+  continuousClipStartOffsetMs?: number;
+  [key: string]: unknown;
+}
+
 export interface Timeline {
   version: 1;
   title: string;
+  assets?: TimelineAssets;
   segments: TimelineSegment[];
 }
 
@@ -49,6 +60,7 @@ export interface VideoGeneratorConfig {
   ttsProvider: 'aliyun';
   subtitleMode: 'burn-in';
   outputDir: string;
+  storageStatePath?: string;
 }
 
 export interface RunReport {

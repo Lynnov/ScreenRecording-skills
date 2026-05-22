@@ -19,8 +19,11 @@
 - Modify: `src/lib/video-generator/browser/recorder.ts` — 改为一个 context/page 连续录制整条 timeline。
 - Modify: `src/lib/video-generator/ffmpeg.ts` — 渲染时优先使用顶层 continuous clip，避免重复 concat 同一个 clip。
 - Modify: `src/lib/video-generator/subtitles.ts` — 字幕输出规范化。
+- Modify: `src/cli/video-generator.ts` — 解析 `--storage-state <file>` 并传入 pipeline。
+- Modify: `src/lib/video-generator/config.ts` — 增加可选 `storageStatePath` 配置。
+- Modify: `src/lib/video-generator/browser/recorder.ts` — 创建 context 时加载 Playwright storage state。
 - Modify: `examples/video-generator/pacdora-dieline.md` — 用真实滚动展示卡片后点击，不直接打开详情 URL。
-- Modify tests under `tests/video-generator/` — 覆盖类型、解析、动作、录制、渲染、字幕和示例脚本行为。
+- Modify tests under `tests/video-generator/` — 覆盖类型、解析、动作、录制、渲染、字幕、登录态和示例脚本行为。
 
 ---
 
@@ -32,7 +35,7 @@
 - Test: `tests/video-generator/types.unit.test.ts`
 - Test: `tests/video-generator/config.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，覆盖顶层连续录制资产和 1920×1080 默认视口**
+- [x] **Step 1: 写失败测试，覆盖顶层连续录制资产和 1920×1080 默认视口**
 
 在 `tests/video-generator/types.unit.test.ts` 中新增：
 
@@ -70,13 +73,13 @@ test('timeline supports top-level continuous recording assets', () => {
 assert.deepEqual(config.viewport, { width: 1920, height: 1080 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts`
 
 Expected: FAIL，原因包括 `Timeline` 没有 `assets` 字段、`BrowserAction` 没有 `scrollTo`，或默认 viewport 仍是旧尺寸。
 
-- [ ] **Step 3: 修改类型和默认配置**
+- [x] **Step 3: 修改类型和默认配置**
 
 在 `src/lib/video-generator/types.ts` 中新增：
 
@@ -111,13 +114,13 @@ viewport: {
 },
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/types.ts src/lib/video-generator/config.ts tests/video-generator/types.unit.test.ts tests/video-generator/config.unit.test.ts
@@ -132,7 +135,7 @@ git commit -m "feat: add continuous recording timeline assets"
 - Modify: `src/lib/video-generator/script-parser.ts:62-99`
 - Modify: `tests/video-generator/script-parser.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/script-parser.unit.test.ts` 中新增：
 
@@ -156,13 +159,13 @@ test('parseVideoScript parses selector wait and scroll-to-selector actions', () 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: FAIL，报 `Unsupported script action: 等待选择器 ...`。
 
-- [ ] **Step 3: 实现解析**
+- [x] **Step 3: 实现解析**
 
 在 `parseAction` 中，放在普通 `等待` 和普通 `向下滚动` 之前：
 
@@ -178,13 +181,13 @@ if (scrollToSelectorMatch) {
 }
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/script-parser.ts tests/video-generator/script-parser.unit.test.ts
@@ -199,7 +202,7 @@ git commit -m "feat: parse selector wait and scroll actions"
 - Modify: `src/lib/video-generator/browser/actions.ts:4-173`
 - Modify: `tests/video-generator/browser-actions.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/browser-actions.unit.test.ts` 中新增：
 
@@ -224,13 +227,13 @@ test('executeBrowserAction scrolls until selector is visible', async () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/browser-actions.unit.test.ts`
 
 Expected: FAIL，原因是 `Unsupported action type: scrollTo`。
 
-- [ ] **Step 3: 实现动作执行**
+- [x] **Step 3: 实现动作执行**
 
 在 `executeBrowserAction` 的 switch 中新增：
 
@@ -256,13 +259,13 @@ case 'scrollTo':
   return `scrollTo ${describeWaitTarget(action.target)}`;
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/browser-actions.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/browser/actions.ts tests/video-generator/browser-actions.unit.test.ts
@@ -277,7 +280,7 @@ git commit -m "feat: execute scroll-to-selector actions"
 - Modify: `src/lib/video-generator/browser/recorder.ts:14-208`
 - Modify: `tests/video-generator/browser-recorder.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，证明多段只生成一个连续 clip**
+- [x] **Step 1: 写失败测试，证明多段只生成一个连续 clip**
 
 在 `tests/video-generator/browser-recorder.unit.test.ts` 中新增：
 
@@ -329,13 +332,13 @@ test('recordTimelineSegments records multiple segments into one continuous clip'
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: FAIL，原因是 `updated.assets` 不存在，且不同 segment 仍各自生成 clip。
 
-- [ ] **Step 3: 重写 recorder 主流程**
+- [x] **Step 3: 重写 recorder 主流程**
 
 在 `src/lib/video-generator/browser/recorder.ts` 中保留目录创建和错误截图逻辑，但把主流程改为：
 
@@ -423,7 +426,7 @@ export async function recordTimelineSegments({ timeline, config, outputDir }: Re
 
 删除不再使用的 `preparedHtmlDir`、`statePath`、`recordSegment`、`showPreparedPage`、`snapshotPreparedHtml` 相关逻辑。
 
-- [ ] **Step 4: 调整受影响旧测试**
+- [x] **Step 4: 调整受影响旧测试**
 
 在 `tests/video-generator/browser-recorder.unit.test.ts` 中：
 
@@ -431,13 +434,13 @@ export async function recordTimelineSegments({ timeline, config, outputDir }: Re
 - 删除或改写 prepared-html 相关断言，因为连续录制不再写 prepared DOM。
 - 保留失败截图测试，确认截图来自 live page。
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/browser-recorder.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/lib/video-generator/browser/recorder.ts tests/video-generator/browser-recorder.unit.test.ts
@@ -452,7 +455,7 @@ git commit -m "refactor: record video scripts continuously"
 - Modify: `src/lib/video-generator/ffmpeg.ts:28-80`
 - Modify: `tests/video-generator/ffmpeg.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/ffmpeg.unit.test.ts` 中新增：
 
@@ -475,13 +478,13 @@ test('renderFinalVideo uses top-level continuous clip when available', async () 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/ffmpeg.unit.test.ts`
 
 Expected: FAIL，concat list 仍包含两个 segment clip。
 
-- [ ] **Step 3: 实现 continuous clip 优先**
+- [x] **Step 3: 实现 continuous clip 优先**
 
 在 `renderFinalVideo` 中把 `clipPaths` 生成逻辑改为：
 
@@ -497,13 +500,13 @@ const clipPaths = input.timeline.assets?.continuousClipPath !== undefined
     });
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/ffmpeg.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/ffmpeg.ts tests/video-generator/ffmpeg.unit.test.ts
@@ -518,7 +521,7 @@ git commit -m "feat: render continuous recording clips"
 - Modify: `src/lib/video-generator/subtitles.ts:1-39`
 - Modify: `tests/video-generator/subtitles.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `tests/video-generator/subtitles.unit.test.ts` 中新增：
 
@@ -550,13 +553,13 @@ test('renderSrt normalizes subtitle punctuation without changing timing', () => 
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/subtitles.unit.test.ts`
 
 Expected: FAIL，字幕仍包含 `，` 和 `。`。
 
-- [ ] **Step 3: 实现字幕规范化**
+- [x] **Step 3: 实现字幕规范化**
 
 在 `src/lib/video-generator/subtitles.ts` 中新增：
 
@@ -582,13 +585,13 @@ segment.subtitle,
 normalizeSubtitleText(segment.subtitle),
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/subtitles.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/subtitles.ts tests/video-generator/subtitles.unit.test.ts
@@ -603,7 +606,7 @@ git commit -m "feat: normalize generated subtitles"
 - Modify: `examples/video-generator/pacdora-dieline.md:1-24`
 - Modify: `tests/video-generator/script-parser.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，防止示例直接跳详情 URL**
+- [x] **Step 1: 写失败测试，防止示例直接跳详情 URL**
 
 在 `tests/video-generator/script-parser.unit.test.ts` 中新增：
 
@@ -623,13 +626,13 @@ test('Pacdora example scrolls to drawer gift box card before opening detail page
 import { readFile } from 'node:fs/promises';
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: FAIL，因为示例仍直接打开详情 URL。
 
-- [ ] **Step 3: 更新示例脚本**
+- [x] **Step 3: 更新示例脚本**
 
 把 `examples/video-generator/pacdora-dieline.md` 改为：
 
@@ -662,13 +665,13 @@ Expected: FAIL，因为示例仍直接打开详情 URL。
 旁白：确认页面已经生成三百乘三百乘一百毫米的内尺寸刀版。
 ```
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `npm run test:unit -- tests/video-generator/script-parser.unit.test.ts`
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add examples/video-generator/pacdora-dieline.md tests/video-generator/script-parser.unit.test.ts
@@ -677,37 +680,115 @@ git commit -m "test: enforce visible Pacdora card navigation"
 
 ---
 
-### Task 8: 真实录制验证和基础测试
+### Task 8: 支持加载 Playwright storage state 登录态
+
+**Files:**
+- Modify: `src/lib/video-generator/types.ts`
+- Modify: `src/lib/video-generator/config.ts`
+- Modify: `src/cli/video-generator.ts`
+- Modify: `src/lib/video-generator/browser/recorder.ts`
+- Modify: `tests/video-generator/config.unit.test.ts`
+- Modify: `tests/video-generator/cli.unit.test.ts`
+- Modify: `tests/video-generator/browser-recorder.unit.test.ts`
+
+- [x] **Step 1: 写失败测试，覆盖配置和 CLI 参数**
+
+在 `tests/video-generator/config.unit.test.ts` 增加断言：`loadVideoGeneratorConfig({ storageStatePath: 'auth/state.json' }).storageStatePath` 等于该路径。
+
+在 `tests/video-generator/cli.unit.test.ts` 增加测试：调用 `runVideoGeneratorCli(['--script', 'demo.md', '--output', 'out', '--storage-state', 'auth/state.json'], { runVideoGenerator })`，断言 `runVideoGenerator` 收到 `configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' }`。
+
+- [x] **Step 2: 写失败测试，覆盖 recorder 使用 storage state**
+
+在 `tests/video-generator/browser-recorder.unit.test.ts` 增加测试：创建本地 HTTP server，写入一个 Playwright storage state JSON，包含目标 origin 的 cookie 或 localStorage；timeline 打开该 server 页面，页面显示 cookie/localStorage 内容；调用 `recordTimelineSegments` 时传入 `config.storageStatePath`，断言录制成功且页面能看到登录态标记。
+
+- [x] **Step 3: 运行测试确认失败**
+
+Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
+
+Expected: FAIL，原因是类型/config/CLI/recorder 尚未支持 `storageStatePath`。
+
+- [x] **Step 4: 实现配置和 CLI**
+
+在 `VideoGeneratorConfig` 增加可选字段：
+
+```ts
+storageStatePath?: string;
+```
+
+`loadVideoGeneratorConfig` 保持浅合并即可。
+
+在 `src/cli/video-generator.ts`：
+- `ParsedArgs` 增加 `storageStatePath?: string`。
+- `parseArgs` 支持 `--storage-state <file>`。
+- `runVideoGeneratorCli` 调用 pipeline 时传入 `{ outputDir, storageStatePath }`，未提供的字段不要写入。
+- `usage()` 增加 `--storage-state <file>`。
+
+- [x] **Step 5: 实现 recorder 加载 storage state**
+
+在 `recordTimelineSegments` 创建 context 时：
+
+```ts
+context = await browser.newContext({
+  viewport: config.viewport,
+  storageState: config.storageStatePath,
+  recordVideo: { dir: videoDir, size: config.viewport },
+});
+```
+
+如果 Playwright 因文件不存在或格式错误抛错，沿用现有失败报告路径即可，但错误信息应包含原始错误摘要。
+
+- [x] **Step 6: 运行测试确认通过**
+
+Run: `npm run test:unit -- tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts`
+
+Expected: PASS。
+
+- [x] **Step 7: 运行全量基础测试**
+
+Run: `npm run test`
+
+Expected: PASS。
+
+- [x] **Step 8: 提交**
+
+```bash
+git add src/lib/video-generator/types.ts src/lib/video-generator/config.ts src/cli/video-generator.ts src/lib/video-generator/browser/recorder.ts tests/video-generator/config.unit.test.ts tests/video-generator/cli.unit.test.ts tests/video-generator/browser-recorder.unit.test.ts
+git commit -m "feat: load storage state for recordings"
+```
+
+---
+
+### Task 9: 真实录制验证和基础测试
 
 **Files:**
 - No code files unless validation exposes a bug.
 - Runtime output: `video-runs/pacdora-dieline/`
 
-- [ ] **Step 1: 运行基础测试**
+- [x] **Step 1: 运行基础测试**
 
 Run: `npm run test`
 
 Expected: `# fail 0`，所有测试通过。
 
-- [ ] **Step 2: 运行 Pacdora 真实录制**
+- [x] **Step 2: 运行 Pacdora 真实录制**
 
 Run: `npm run video:generate -- --script examples/video-generator/pacdora-dieline.md --output video-runs/pacdora-dieline`
 
 Expected: 输出 `Video generated: video-runs\pacdora-dieline\final.mp4`。
 
-- [ ] **Step 3: 检查生成报告**
+- [x] **Step 3: 检查生成报告**
 
 Run: `node -e "const r=require('./video-runs/pacdora-dieline/run-report.json'); if(!r.ok) throw new Error(JSON.stringify(r)); console.log(r.finalVideoPath)"`
 
 Expected: 输出 `video-runs\pacdora-dieline\final.mp4`。
 
-- [ ] **Step 4: 检查视频文件存在**
+- [x] **Step 4: 检查视频文件存在**
 
 Run: `ls -lh "video-runs/pacdora-dieline/final.mp4"`
 
 Expected: 文件存在且大小大于 0。
 
-- [ ] **Step 5: 检查字幕规范化结果**
+- [x] **Step 5: 检查字幕规范化结果**
 
 Run: `node -e "const fs=require('fs'); const s=fs.readFileSync('video-runs/pacdora-dieline/subtitles.srt','utf8'); if(/[。，,]/.test(s)) throw new Error(s); console.log('subtitles normalized')"`
 
@@ -726,6 +807,69 @@ git commit -m "fix: stabilize continuous recording smoke test"
 
 ## 自检结果
 
-- Spec 覆盖：连续录制、1920×1080、页面内不重载、真实滚动点击 Pacdora 卡片、字幕规范化、错误报告和测试验证均有任务覆盖。
+- Spec 覆盖：连续录制、1920×1080、页面内不重载、真实滚动点击 Pacdora 卡片、字幕规范化、`--storage-state` 登录态加载、错误报告和测试验证均有任务覆盖。
 - 占位扫描：没有 `TBD`、`TODO`、`implement later` 或未展开的“类似上一步”。
 - 类型一致性：计划统一使用 `Timeline.assets.continuousClipPath`、`scrollTo` action、`WaitTarget` selector，后续任务引用与 Task 1 定义一致。
+
+---
+
+## 2026-05-22 最终真实录制复盘
+
+### 背景
+
+Task 9 进入真实录制验证后，`video-runs/pacdora-dieline/final.mp4` 能成功生成，但 9 个 segment 中点帧拼成的 `video-runs/pacdora-dieline/debug-frames/midpoints/contact.png` 暴露出两个用户可感知问题：
+
+1. `seg-001` 中点仍是页面初始白屏，只显示字幕，用户希望视频一开始就是已加载页面。
+2. `seg-004` 中点停留在详情页“构建模型”遮罩，用户希望进入详情讲解时页面已稳定。
+
+### 根因
+
+- **连续录制源 clip 从 `newPage()` 后立刻开始写入。** 原实现把 `seg-001.startsAtMs` 设为 0，并直接用整条连续 clip 渲染最终视频，因此首次 `goto` 的页面加载白屏被保留到成片开头。
+- **segment 时间轴和浏览器动作时间混在一起。** 旧逻辑把 action 执行耗时计入 segment 播放区间，导致“点击详情页”这类动作的加载过程会占据旁白中点帧。
+- **详情页等待条件不足。** 示例脚本只等待 `.size-mode-item[gtm="ga-dieline_dieline_basic_inner"]` 出现，这个控件出现时页面仍可能被“构建模型”遮罩覆盖。
+- **`text=构建模型` 存在多个匹配节点。** 初版隐藏等待使用 `locator.waitFor({ state: 'hidden' })`，真实页面触发 Playwright strict mode violation，因为同一文本解析到多个元素。
+- **渲染层不能只做输入级 `-ss`。** 试过用 `-ss` 跳过连续 clip 初始加载区间，但这只裁掉画面，没有同步调整音频/字幕时间轴，导致后段采帧黑屏。
+- **调试总览生成脚本需要先缩放。** 直接用 `tile=3x3` 拼 1920×1080 原图时，总览尺寸过大，查看时容易误判只有左上格有效；最终改用 `scale=640:360 + xstack` 生成可读总览。
+
+### 修复方案
+
+- 新增脚本语法 `等待隐藏选择器 ...`，解析为 `WaitTarget` 的 `hiddenSelector`，并在 timeline validator 中允许该目标类型。
+- `waitForTarget(hiddenSelector)` 改为轮询所有匹配 locator 的 `isVisible()`，只要全部不可见或不存在即通过，避免 strict mode 多节点错误。
+- recorder 为每个 segment 记录稳定画面区间：
+  - action 执行期间只作为准备动作，不进入最终旁白片段画面。
+  - action 完成后的稳定页面区间写入 `segment.assets.videoStartMs/videoEndMs`。
+  - `startsAtMs/endsAtMs` 继续表示旁白/字幕/音频时间轴。
+  - 显式 timeline gap 会同步推进 `videoCursorMs`，避免真实录制时间和 trim 区间错位。
+- ffmpeg 渲染连续 clip 时不再直接使用整条视频，而是按每段 `videoStartMs/videoEndMs` 做 `trim + setpts`，再 `concat` 成最终画面流；字幕通过 filtergraph 接在 concat 后，音频仍按 timeline 合并。
+- Pacdora 示例在点击详情卡片后增加：
+  - `等待选择器 .size-mode-item[gtm="ga-dieline_dieline_basic_inner"]`
+  - `等待隐藏选择器 text=构建模型`
+  并在切换内尺寸后等待输入框出现。
+
+### 验证过程
+
+- 先按 TDD 补失败测试：
+  - 首段 action 完成后才开始稳定画面区间。
+  - `hiddenSelector` 支持多个匹配节点全部消失。
+  - ffmpeg 按 segment 稳定画面区间 trim/concat 连续 clip。
+  - Pacdora 示例包含详情页遮罩消失等待。
+- 真实执行：
+  - `npm run video:generate -- --script examples/video-generator/pacdora-dieline.md --output video-runs/pacdora-dieline`
+  - 重新抽取 9 个 segment 中点帧并生成 `debug-frames/midpoints/contact.png`。
+- 独立 code review 发现两个问题并已修复：
+  - 显式 gap 等待没有同步推进 `videoCursorMs`。
+  - 无字幕路径使用 `[trimmed]copy[v]` 不可靠，改为 `[trimmed]null[v]`。
+- 最终验证：
+  - `npm run test` 通过，91/91 tests pass。
+  - `run-report.json` 为 `ok: true`。
+  - `final.mp4` 和 `debug-frames/midpoints/contact.png` 文件存在且非空。
+  - 最新 3×3 总览图确认 `seg-001` 已是加载后的页面，`seg-004` 不再显示“构建模型”遮罩。
+
+### 经验教训
+
+- 连续录制不等于最终视频必须线性使用整条 clip。真实浏览器动作包含加载、遮罩、等待等“准备时间”，最终成片应按稳定画面区间裁切。
+- 片段时间轴需区分三类时间：旁白/字幕时间、浏览器动作耗时、连续 clip 物理录制时间。混用会造成中点帧错位。
+- 页面“目标控件可见”不代表页面已稳定，复杂网页需要等待遮罩/加载态消失。
+- Playwright 文本 selector 在真实页面常会匹配多个节点，隐藏等待不能依赖 strict locator wait。
+- 调试视频时，只看命令成功不够；必须抽取关键帧做视觉验收，且总览图要缩略到可读尺寸。
+- code review 对时间轴类问题很有效，尤其能发现单测未覆盖的 gap 和无字幕分支。

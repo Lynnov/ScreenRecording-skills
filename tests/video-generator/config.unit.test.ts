@@ -26,3 +26,7 @@ test('loadVideoGeneratorConfig merges overrides without dropping nested viewport
     outputDir: './custom',
   });
 });
+
+test('loadVideoGeneratorConfig supports a Playwright storage state path', () => {
+  assert.equal(loadVideoGeneratorConfig({ storageStatePath: 'auth/state.json' }).storageStatePath, 'auth/state.json');
+});

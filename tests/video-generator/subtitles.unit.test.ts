@@ -88,3 +88,29 @@ test('renderSrt accumulates durations when explicit timestamps are missing', () 
     '',
   ].join('\n'));
 });
+
+test('renderSrt normalizes subtitle punctuation without changing timing', () => {
+  const timeline: Timeline = {
+    version: 1,
+    title: 'Subtitles',
+    segments: [
+      {
+        id: 'intro',
+        sourceText: 'intro',
+        narration: '首先打开页面，确认状态。',
+        subtitle: '首先打开页面，确认状态。',
+        actions: [],
+        estimatedDurationMs: 1000,
+        bufferMs: 0,
+        assets: {},
+      },
+    ],
+  };
+
+  assert.equal(renderSrt(timeline), [
+    '1',
+    '00:00:00,000 --> 00:00:01,000',
+    '首先打开页面 确认状态',
+    '',
+  ].join('\n'));
+});

@@ -112,6 +112,10 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
       }
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
+    case 'scrollTo':
+      validateSelectorWaitTarget(action.target, segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
     default:
       throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', 'Unsupported browser action type.', segmentId);
   }
@@ -128,6 +132,12 @@ function validateOptionalWaitFor(waitFor: unknown, segmentId: string | undefined
   }
 }
 
+function validateSelectorWaitTarget(target: unknown, segmentId: string | undefined): void {
+  if (!isRecord(target) || target.type !== 'selector' || typeof target.value !== 'string' || !target.value.trim()) {
+    throw new VideoGeneratorError('INVALID_WAIT_TARGET', 'ScrollTo target must be a selector wait target.', segmentId);
+  }
+}
+
 function validateWaitTarget(target: unknown, segmentId: string | undefined): void {
   if (!isRecord(target) || typeof target.type !== 'string') {
     throw new VideoGeneratorError('INVALID_WAIT_TARGET', 'Wait target must be an object with a type.', segmentId);
@@ -136,6 +146,7 @@ function validateWaitTarget(target: unknown, segmentId: string | undefined): voi
   switch (target.type) {
     case 'text':
     case 'selector':
+    case 'hiddenSelector':
     case 'url':
       if (typeof target.value !== 'string' || !target.value.trim()) {
         throw new VideoGeneratorError('INVALID_WAIT_TARGET', 'Wait target value must be a non-empty string.', segmentId);

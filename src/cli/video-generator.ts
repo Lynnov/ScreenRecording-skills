@@ -19,6 +19,7 @@ export interface VideoGeneratorCliIo {
 interface ParsedArgs {
   scriptPath?: string;
   outputDir?: string;
+  storageStatePath?: string;
   ttsSmokeText?: string;
   error?: string;
 }
@@ -43,11 +44,16 @@ export async function runVideoGeneratorCli(argv: string[], io: VideoGeneratorCli
     return 1;
   }
 
+  const configOverrides = {
+    ...(parsed.outputDir === undefined ? {} : { outputDir: parsed.outputDir }),
+    ...(parsed.storageStatePath === undefined ? {} : { storageStatePath: parsed.storageStatePath }),
+  };
+
   let report: RunReport;
   try {
     report = await (io.runVideoGenerator ?? runVideoGenerator)({
       scriptPath: parsed.scriptPath,
-      configOverrides: parsed.outputDir === undefined ? undefined : { outputDir: parsed.outputDir },
+      configOverrides: Object.keys(configOverrides).length === 0 ? undefined : configOverrides,
     });
   } catch (error) {
     stderr(`Video generation failed.\n${error instanceof Error ? error.message : String(error)}`);
@@ -83,6 +89,15 @@ function parseArgs(argv: string[]): ParsedArgs {
         return { error: value.error };
       }
       parsed.outputDir = value.value;
+      index += 1;
+      continue;
+    }
+    if (arg === '--storage-state') {
+      const value = readFlagValue(argv, index, '--storage-state');
+      if (value.error !== undefined) {
+        return { error: value.error };
+      }
+      parsed.storageStatePath = value.value;
       index += 1;
       continue;
     }
@@ -149,7 +164,7 @@ function formatFailure(report: RunReport): string {
 function usage(): string {
   return [
     'Usage:',
-    '  npm run video:generate -- --script <script.md> [--output <output-dir>]',
+    '  npm run video:generate -- --script <script.md> [--output <output-dir>] [--storage-state <file>]',
     '  npm run video:tts-smoke -- [text] [--output <output-dir>]',
   ].join('\n');
 }

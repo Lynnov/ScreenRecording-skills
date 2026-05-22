@@ -154,6 +154,7 @@ test('validateTimeline accepts valid wait target shapes on waitFor and optional 
     { type: 'click', text: '继续', waitFor: { type: 'text', value: '完成' } },
     { type: 'fill', selector: '#email', value: 'a@example.com', waitFor: { type: 'selector', value: '#ok' } },
     { type: 'scroll', y: 120, waitFor: { type: 'url', value: 'https://example.com/done' } },
+    { type: 'scrollTo', target: { type: 'selector', value: '.card' }, waitFor: { type: 'text', value: '完成' } },
     { type: 'waitFor', target: { type: 'networkIdle' } },
   ];
 
@@ -173,6 +174,7 @@ test('validateTimeline rejects invalid wait target shape or value on waitFor act
     { type: 'click', text: '继续', waitFor: { type: 'selector', value: '' } },
     { type: 'fill', text: '邮箱', value: 'a@example.com', waitFor: { type: 'url', value: '' } },
     { type: 'scroll', y: 120, waitFor: { type: 'visible', value: '完成' } as unknown as WaitTarget },
+    { type: 'scrollTo', target: { type: 'text', value: 'x' } as unknown as Extract<WaitTarget, { type: 'selector' }> },
   ];
 
   for (const action of cases) {

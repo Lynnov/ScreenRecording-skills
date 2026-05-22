@@ -16,6 +16,7 @@
 - 页面内操作之间不重建页面、不重新加载页面。
 - 脚本能表达“滚动直到目标卡片可见，再点击它”。
 - 字幕文本去掉中文句号，并把逗号替换为空格。
+- 支持通过 `--storage-state <file>` 加载已导出的登录态，用于录制需要登录的业务系统。
 
 ## 非目标
 
@@ -42,6 +43,14 @@
 录制 context 使用 `1920 × 1080` viewport。这里的“全屏”定义为录制画布尺寸，而不是操作系统原生全屏。因为 Playwright 的视频录制基于 viewport，如果未来需要 OS 级全屏，应作为独立增强处理。
 
 录制器不再为每个 segment 创建新 page。只有脚本中出现 `打开 <url>` 时才进行真实页面导航。
+
+## 登录态
+
+真实业务系统录制需要复用登录态。本轮采用 `--storage-state <file>` 方案：用户先通过独立流程导出 Playwright storage state JSON，生成器录制时把该文件传给 browser context。这样不会直接读取或锁定日常 Chrome profile，也便于测试和复现。
+
+CLI 增加 `--storage-state <file>` 参数，并写入 `configOverrides.storageStatePath`。`VideoGeneratorConfig` 增加可选 `storageStatePath`。`recordTimelineSegments` 创建 context 时，如果 `storageStatePath` 存在，就传入 Playwright `storageState`。
+
+如果 storage state 文件不存在、不可读或格式无效，录制应在创建 context 阶段失败，并在报告中给出清晰错误。导出登录态的辅助命令可以后续单独做；本轮先提供加载入口，满足已登录业务系统录制的最小闭环。
 
 ## 动作与等待
 
@@ -114,6 +123,8 @@ TTS 旁白文本保持原样，只规范化字幕输出。
 - `向下滚动到选择器` 可以解析并滚动到目标元素。
 - 字幕规范化会删除句号并替换逗号。
 - Pacdora 示例脚本在进入详情前会先滚动展示目标卡片。
+- CLI 能解析 `--storage-state <file>` 并传入 pipeline config overrides。
+- recorder 创建 context 时会使用 `storageStatePath`，并能用测试服务验证登录态 cookie/localStorage 生效。
 
 实现后运行 `npm run test`。再运行 Pacdora 脚本作为真实录制冒烟测试，确认生成 `video-runs/pacdora-dieline/final.mp4`。
 

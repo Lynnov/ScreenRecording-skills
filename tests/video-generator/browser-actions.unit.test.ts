@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer, type Server } from 'node:http';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { executeBrowserAction, waitForTarget } from '../../src/lib/video-generator/browser/actions.js';
 import { VideoGeneratorError } from '../../src/lib/video-generator/types.js';
@@ -17,6 +18,44 @@ async function withPage(run: (page: Page) => Promise<void>): Promise<void> {
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
   }
+}
+
+async function withServer(run: (origin: string) => Promise<void>): Promise<void> {
+  const server = createServer((request, response) => {
+    if (request.url === '/detail') {
+      response.writeHead(200, { 'Content-Type': 'text/html' });
+      response.end('<main><h1>Detail Page</h1></main>');
+      return;
+    }
+
+    response.writeHead(404);
+    response.end('Not found');
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Expected HTTP server to listen on a TCP port.');
+  }
+
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await closeServer(server);
+  }
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 test('executeBrowserAction clicks exact text and waits for text', async () => {
@@ -100,6 +139,24 @@ test('waitForTarget supports selector, url, and networkIdle', async () => {
   });
 });
 
+test('waitForTarget waits until all matching hidden selector targets disappear', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main>
+        <p>构建模型</p>
+        <span>构建模型</span>
+        <script>
+          setTimeout(() => document.querySelectorAll('p, span').forEach((element) => element.remove()), 100);
+        </script>
+      </main>
+    `);
+
+    await waitForTarget(page, { type: 'hiddenSelector', value: 'text=构建模型' }, 1000);
+
+    assert.equal(await page.locator('text=构建模型').count(), 0);
+  });
+});
+
 test('executeBrowserAction scrolls by wheel delta', async () => {
   await withPage(async (page) => {
     await page.setContent('<main style="height: 3000px"><h1>Scrollable</h1></main>');
@@ -108,6 +165,44 @@ test('executeBrowserAction scrolls by wheel delta', async () => {
 
     await page.waitForFunction('window.scrollY > 0', undefined, { timeout: 1000 });
     assert.ok(await page.evaluate('window.scrollY > 0'));
+  });
+});
+
+test('executeBrowserAction scrolls until selector is visible', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main style="height: 2400px">
+        <div style="height: 1800px">Top</div>
+        <a class="target-card" href="/details">抽屉式礼盒</a>
+      </main>
+    `);
+
+    await executeBrowserAction(page, {
+      type: 'scrollTo',
+      target: { type: 'selector', value: '.target-card' },
+    }, 1000);
+
+    assert.ok(await page.locator('.target-card').isVisible());
+    assert.ok(await page.evaluate('window.scrollY > 0'));
+  });
+});
+
+test('executeBrowserAction opens target blank links in the same active page', async () => {
+  await withServer(async (origin) => {
+    await withPage(async (page) => {
+      await page.setContent(`
+        <a href="${origin}/detail" target="_blank">Open detail</a>
+      `);
+
+      const activePage = await executeBrowserAction(page, {
+        type: 'click',
+        text: 'Open detail',
+        waitFor: { type: 'text', value: 'Detail Page' },
+      }, 1000);
+
+      assert.equal(activePage, page);
+      assert.equal(await activePage.getByText('Detail Page').count(), 1);
+    });
   });
 });
 
