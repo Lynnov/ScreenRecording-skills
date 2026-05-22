@@ -85,9 +85,19 @@ function parseAction(line: string): BrowserAction {
     return fillAction;
   }
 
+  const waitForSelectorMatch = line.match(/^等待选择器\s+(.+)$/u);
+  if (waitForSelectorMatch) {
+    return { type: 'waitFor', target: { type: 'selector', value: stripWrappingQuotes(waitForSelectorMatch[1]) } };
+  }
+
   const waitForMatch = line.match(/^等待\s+(.+)$/u);
   if (waitForMatch) {
     return { type: 'waitFor', target: { type: 'text', value: stripWrappingQuotes(waitForMatch[1]) } };
+  }
+
+  const scrollToSelectorMatch = line.match(/^向下滚动到选择器\s+(.+)$/u);
+  if (scrollToSelectorMatch) {
+    return { type: 'scrollTo', target: { type: 'selector', value: stripWrappingQuotes(scrollToSelectorMatch[1]) } };
   }
 
   const scrollMatch = line.match(/^向下滚动\s+(.+)$/u);

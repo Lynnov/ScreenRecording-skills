@@ -77,6 +77,24 @@ test('parseVideoScript parses selector click and fill actions for ambiguous page
   ]);
 });
 
+test('parseVideoScript parses selector wait and scroll-to-selector actions', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：找到目标卡片
+等待选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]
+向下滚动到选择器 a[href*="custom-dimensions-tray-boxes-dieline-128020"]`, config);
+
+  assert.deepEqual(timeline.segments[0]?.actions, [
+    {
+      type: 'waitFor',
+      target: { type: 'selector', value: 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]' },
+    },
+    {
+      type: 'scrollTo',
+      target: { type: 'selector', value: 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]' },
+    },
+  ]);
+});
+
 test('parseVideoScript maps built-in demo actions to a playable data URL', () => {
   const config = loadVideoGeneratorConfig();
 
