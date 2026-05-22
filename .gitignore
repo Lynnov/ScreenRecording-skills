@@ -21,6 +21,7 @@ pnpm-debug.log*
 
 .claude/
 video-runs/
+.worktrees/
 *.mp4
 *.webm
 *.mov
