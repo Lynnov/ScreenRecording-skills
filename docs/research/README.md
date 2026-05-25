@@ -36,3 +36,4 @@
 | craft-agents-markdown-internals.md | Craft Agents 内部 Markdown 实现调研 — 渲染走 react-markdown + unified + Shiki LRU；Tiptap 仅用于编辑器；**代码块 language 拦截 = 10 个 MarkdownXxxBlock 轻量 Artifact**（Mermaid/Diff/JSON/Datatable/HTML/PDF/Image）；`id + children` 双键 memo 可修复 CodePilot 长文档重渲；修订了 Tiptap 评估与 AI Elements Artifact 路径 |
 | review-packet-opus-4-7-and-sdk-0-2-111.md | **Codex 审查包**：Opus 4.7 升级 + Agent SDK 0.2.111 采纳本轮迭代的范围、commit 分组、关键架构决策、已知 out-of-scope、测试状态、希望重点审的 7 个点 |
 | scripted-browser-video-generator.md | 脚本驱动浏览器教程视频生成器设计规格：自然语言脚本 → 浏览器录制 → 阿里云 TTS → 字幕 → ffmpeg 合成 |
+| video-generator-product-batch-price-adjustment-retrospective-2026-05-22.md | 产品批量调价视频生成调试复盘：前景层定位、默认选项演示、下拉选择器、真实生成验证 |

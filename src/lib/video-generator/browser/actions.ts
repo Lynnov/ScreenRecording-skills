@@ -22,11 +22,12 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           throw new VideoGeneratorError('INVALID_CLICK_TARGET', 'click action requires text or selector.');
         }
 
-        const samePageHref = await targetBlankHref(locator, timeoutMs);
+        const target = await resolveClickLocator(locator, timeoutMs);
+        const samePageHref = await targetBlankHref(target);
         if (samePageHref !== undefined) {
           await page.goto(samePageHref, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         } else {
-          await locator.click({ timeout: timeoutMs });
+          await clickLocator(target, timeoutMs);
         }
 
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
@@ -108,11 +109,24 @@ export async function waitForTarget(page: Page, target: WaitTarget, timeoutMs: n
   }
 }
 
-async function targetBlankHref(locator: Locator, timeoutMs: number): Promise<string | undefined> {
-  return locator.evaluate((element) => {
-    const anchor = element.closest('a');
-    return anchor?.target === '_blank' && anchor.href ? anchor.href : undefined;
-  }, undefined, { timeout: timeoutMs });
+async function targetBlankHref(locator: Locator): Promise<string | undefined> {
+  try {
+    const handle = await locator.elementHandle({ timeout: 500 });
+    if (handle === null) {
+      return undefined;
+    }
+
+    return handle.evaluate((element) => {
+      const anchor = element.closest('a');
+      return anchor?.target === '_blank' && anchor.href ? anchor.href : undefined;
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+async function clickLocator(locator: Locator, timeoutMs: number): Promise<void> {
+  await locator.click({ timeout: timeoutMs });
 }
 
 async function waitForAllLocatorsHidden(locator: Locator, timeoutMs: number): Promise<void> {
@@ -150,16 +164,105 @@ async function fillByText(page: Page, text: string, value: string, timeoutMs: nu
 }
 
 async function fillLocator(locator: Locator, value: string, timeoutMs: number): Promise<void> {
-  const isEditable = await locator.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
+  const target = await resolveActionLocator(locator, timeoutMs);
+  const isEditable = await target.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
     || element.isContentEditable, undefined, { timeout: timeoutMs });
   if (!isEditable) {
     throw new Error('Target is not editable.');
   }
 
-  await locator.click({ timeout: timeoutMs });
-  await locator.page().keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
-  await locator.page().keyboard.type(value);
-  await locator.page().keyboard.press('Tab');
+  await target.click({ timeout: timeoutMs });
+  await target.page().keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+  await target.page().keyboard.type(value);
+  await target.page().keyboard.press('Tab');
+}
+
+async function resolveClickLocator(locator: Locator, timeoutMs: number): Promise<Locator> {
+  const target = await resolveActionLocator(locator, timeoutMs);
+  const clickableAncestor = await resolveClickableAncestor(target, timeoutMs);
+  if (clickableAncestor !== undefined) {
+    return clickableAncestor;
+  }
+
+  const fieldControl = await resolveFieldControl(target, timeoutMs);
+  return fieldControl ?? target;
+}
+
+async function resolveActionLocator(locator: Locator, timeoutMs: number): Promise<Locator> {
+  const candidates = await visibleLocators(locator, timeoutMs);
+  if (candidates.length <= 1) {
+    return locator;
+  }
+
+  const overlayLocators: Locator[] = [];
+  const dialogLocators: Locator[] = [];
+  for (const candidate of candidates) {
+    const foregroundLayer = await foregroundLayerType(candidate, timeoutMs);
+    if (foregroundLayer === 'overlay') {
+      overlayLocators.push(candidate);
+    } else if (foregroundLayer === 'dialog') {
+      dialogLocators.push(candidate);
+    }
+  }
+
+  if (overlayLocators.length === 1) {
+    return overlayLocators[0];
+  }
+  if (dialogLocators.length === 1) {
+    return dialogLocators[0];
+  }
+
+  return locator;
+}
+
+async function resolveFieldControl(locator: Locator, timeoutMs: number): Promise<Locator | undefined> {
+  const control = locator.locator('xpath=ancestor::*[.//*[self::input or self::textarea or self::button or @role="button" or @role="combobox"]][1]//*[self::input or self::textarea or self::button or @role="button" or @role="combobox"]');
+  const candidates = await visibleLocators(control, timeoutMs);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+async function resolveClickableAncestor(locator: Locator, timeoutMs: number): Promise<Locator | undefined> {
+  const candidates = await visibleLocators(locator.locator('xpath=ancestor-or-self::*[self::button or self::a or self::li or @role="button" or @role="option" or @role="menuitem" or contains(@class, "el-select-dropdown__item") or contains(@class, "select-option")][1]'), timeoutMs);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+async function visibleLocators(locator: Locator, timeoutMs: number): Promise<Locator[]> {
+  const count = await locator.count();
+  const candidates: Locator[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const candidate = locator.nth(index);
+    if (await candidate.isVisible({ timeout: Math.min(100, timeoutMs) })) {
+      candidates.push(candidate);
+    }
+  }
+
+  return candidates;
+}
+
+async function foregroundLayerType(locator: Locator, timeoutMs: number): Promise<'overlay' | 'dialog' | undefined> {
+  return locator.evaluate((element) => {
+    const clickable = element.closest('button, a, li, [role="button"], [role="option"], [role="menuitem"], .el-select-dropdown__item, [class*="select-option"]') ?? element;
+    const overlay = clickable.closest([
+      '.el-select-dropdown',
+      '.ant-select-dropdown',
+      '.arco-select-popup',
+      '.semi-select-option-list',
+      '[class*="dropdown"]',
+      '[class*="popover"]',
+    ].join(', '));
+    const dialog = clickable.closest('[role="dialog"], [aria-modal="true"], .ant-modal, .el-dialog, .arco-modal, .semi-modal');
+    const layer = overlay ?? dialog;
+    if (layer === null) {
+      return undefined;
+    }
+
+    const style = element.ownerDocument.defaultView?.getComputedStyle(layer);
+    if (style === undefined || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) {
+      return undefined;
+    }
+
+    return overlay === null ? 'dialog' : 'overlay';
+  }, undefined, { timeout: timeoutMs });
 }
 
 async function waitForOptionalTarget(page: Page, target: WaitTarget | undefined, timeoutMs: number): Promise<void> {

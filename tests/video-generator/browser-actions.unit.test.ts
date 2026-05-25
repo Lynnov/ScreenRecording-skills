@@ -79,6 +79,124 @@ test('executeBrowserAction clicks exact text and waits for text', async () => {
   });
 });
 
+test('executeBrowserAction waits for delayed text targets before link probing', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <script>
+        setTimeout(() => {
+          document.body.insertAdjacentHTML('beforeend', '<button>开启工作</button>');
+          document.querySelector('button').addEventListener('click', () => {
+            document.body.insertAdjacentHTML('beforeend', '<p>Started</p>');
+          });
+        }, 200);
+      </script>
+    `);
+
+    await executeBrowserAction(page, {
+      type: 'click',
+      text: '开启工作',
+      waitFor: { type: 'text', value: 'Started' },
+    }, 1000);
+
+    assert.equal(await page.getByText('Started').count(), 1);
+  });
+});
+
+test('executeBrowserAction clicks field control for matching text inside active dialog first', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main>
+        <span>销售类型</span>
+      </main>
+      <div role="dialog" aria-modal="true">
+        <div class="form-row">
+          <label>销售类型</label>
+          <button aria-label="请选择销售类型">请选择</button>
+        </div>
+      </div>
+      <p id="result">pending</p>
+      <script>
+        document.querySelector('button').addEventListener('click', () => {
+          document.querySelector('#result').textContent = 'clicked';
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'click', text: '销售类型' }, 1000);
+
+    assert.equal(await page.locator('#result').innerText(), 'clicked');
+  });
+});
+
+test('executeBrowserAction clicks matching text inside active overlay first', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main>
+        <span>平台团购</span>
+        <span>平台团购</span>
+      </main>
+      <div class="el-select-dropdown" style="position: fixed; left: 20px; top: 20px; z-index: 3000;">
+        <div id="option">平台团购</div>
+      </div>
+      <p id="result">pending</p>
+      <script>
+        document.querySelector('#option').addEventListener('click', () => {
+          document.querySelector('#result').textContent = 'selected';
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'click', text: '平台团购' }, 1000);
+
+    assert.equal(await page.locator('#result').innerText(), 'selected');
+  });
+});
+
+test('executeBrowserAction clicks visible select option when text span is hidden', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main><span>全部</span></main>
+      <div class="el-select-dropdown" style="position: fixed; left: 20px; top: 20px; z-index: 3000;">
+        <li class="el-select-dropdown__item" id="hidden-option"><span style="display: none;">全部</span></li>
+        <li class="el-select-dropdown__item" id="visible-option"><span>全部</span></li>
+      </div>
+      <p id="result">pending</p>
+      <script>
+        document.querySelector('#visible-option').addEventListener('click', () => {
+          document.querySelector('#result').textContent = 'selected';
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'click', text: '全部' }, 1000);
+
+    assert.equal(await page.locator('#result').innerText(), 'selected');
+  });
+});
+
+test('executeBrowserAction prefers select overlay over dialog selected value', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div role="dialog" aria-modal="true">
+        <span>全部</span>
+      </div>
+      <div class="el-select-dropdown" style="position: fixed; left: 20px; top: 20px; z-index: 3000;">
+        <li class="el-select-dropdown__item" id="option"><span>全部</span></li>
+      </div>
+      <p id="result">pending</p>
+      <script>
+        document.querySelector('#option').addEventListener('click', () => {
+          document.querySelector('#result').textContent = 'selected';
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'click', text: '全部' }, 1000);
+
+    assert.equal(await page.locator('#result').innerText(), 'selected');
+  });
+});
+
 test('executeBrowserAction fills selector and text targets', async () => {
   await withPage(async (page) => {
     await page.setContent(`
@@ -91,6 +209,24 @@ test('executeBrowserAction fills selector and text targets', async () => {
 
     assert.equal(await page.locator('#name').inputValue(), 'Ada');
     assert.equal(await page.locator('#email').inputValue(), 'ada@example.com');
+  });
+});
+
+test('executeBrowserAction fills matching placeholder inside active dialog first', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <main>
+        <input id="background" placeholder="调价名称" />
+      </main>
+      <div role="dialog" aria-modal="true">
+        <input id="modal" placeholder="调价名称" />
+      </div>
+    `);
+
+    await executeBrowserAction(page, { type: 'fill', text: '调价名称', value: '默认调价名称' }, 1000);
+
+    assert.equal(await page.locator('#modal').inputValue(), '默认调价名称');
+    assert.equal(await page.locator('#background').inputValue(), '');
   });
 });
 
