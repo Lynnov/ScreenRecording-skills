@@ -18,10 +18,11 @@ test('writeRunReport writes success report with final artifacts', async () => {
   };
 
   try {
-    const reportPath = await writeRunReport(report);
-    const written = JSON.parse(await readFile(reportPath, 'utf8')) as RunReport;
+    const result = await writeRunReport(report);
+    const written = JSON.parse(await readFile(result.runReportPath, 'utf8')) as RunReport;
 
-    assert.equal(reportPath, path.join(outputDir, 'run-report.json'));
+    assert.equal(result.runReportPath, path.join(outputDir, 'run-report.json'));
+    assert.equal(result.candidateReportPath, undefined);
     assert.equal(written.ok, true);
     assert.equal(written.finalVideoPath, report.finalVideoPath);
     assert.equal(written.timelinePath, report.timelinePath);
@@ -42,14 +43,61 @@ test('writeRunReport writes failure report with failure details', async () => {
   };
 
   try {
-    const reportPath = await writeRunReport(report);
-    const written = JSON.parse(await readFile(reportPath, 'utf8')) as RunReport;
+    const result = await writeRunReport(report);
+    const written = JSON.parse(await readFile(result.runReportPath, 'utf8')) as RunReport;
 
-    assert.equal(reportPath, path.join(outputDir, 'run-report.json'));
+    assert.equal(result.runReportPath, path.join(outputDir, 'run-report.json'));
+    assert.equal(result.candidateReportPath, undefined);
     assert.equal(written.ok, false);
     assert.equal(written.failedSegmentId, report.failedSegmentId);
     assert.equal(written.errorMessage, report.errorMessage);
     assert.equal(written.screenshotPath, report.screenshotPath);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('writeRunReport writes candidate report when candidates are present', async () => {
+  const outputDir = path.join(tmpdir(), `run-report-candidates-${process.pid}-${Date.now()}`);
+  const screenshotPath = path.join(outputDir, 'screenshots', 'seg-002.png');
+  const report: RunReport = {
+    ok: false,
+    outputDir,
+    failedSegmentId: 'seg-002',
+    failedAction: { type: 'semanticClick', target: { kind: 'button', name: 'Submit' } },
+    failureReason: 'AMBIGUOUS_TARGET',
+    candidates: [
+      {
+        label: 'Submit button',
+        role: 'button',
+        name: 'Submit',
+        text: 'Submit',
+        layer: 'page',
+        confidence: 'medium',
+        selectorHint: 'button:nth-of-type(2)',
+      },
+    ],
+    screenshotPath,
+    errorMessage: 'Ambiguous semantic target',
+  };
+
+  try {
+    const result = await writeRunReport(report);
+    const writtenRunReport = JSON.parse(await readFile(result.runReportPath, 'utf8')) as RunReport;
+    const writtenCandidateReport = JSON.parse(await readFile(result.candidateReportPath ?? '', 'utf8')) as Pick<RunReport,
+      'failureReason' | 'failedSegmentId' | 'failedAction' | 'candidates' | 'screenshotPath'
+    >;
+
+    assert.equal(result.runReportPath, path.join(outputDir, 'run-report.json'));
+    assert.equal(result.candidateReportPath, path.join(outputDir, 'candidate-report.json'));
+    assert.equal(writtenRunReport.candidateReportPath, result.candidateReportPath);
+    assert.deepEqual(writtenCandidateReport, {
+      failureReason: report.failureReason,
+      failedSegmentId: report.failedSegmentId,
+      failedAction: report.failedAction,
+      candidates: report.candidates,
+      screenshotPath: report.screenshotPath,
+    });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }

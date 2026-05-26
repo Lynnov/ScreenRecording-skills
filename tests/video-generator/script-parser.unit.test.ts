@@ -38,7 +38,7 @@ test('parseVideoScript parses a three segment MVP script with source text ids na
     timeline.segments.map((segment) => segment.actions.map((action) => action.type)),
     [
       ['goto', 'waitFor'],
-      ['click', 'fill'],
+      ['click', 'semanticFill'],
       ['scroll'],
     ],
   );
@@ -53,7 +53,7 @@ test('parseVideoScript parses a three segment MVP script with source text ids na
   ]);
   assert.deepEqual(timeline.segments[1].actions, [
     { type: 'click', text: '登录' },
-    { type: 'fill', text: '用户名', value: 'alice' },
+    { type: 'semanticFill', target: { kind: 'field', name: '用户名' }, value: 'alice' },
   ]);
 });
 
@@ -62,7 +62,7 @@ test('parseVideoScript parses quoted fill values that contain the separator word
   const timeline = parseVideoScript('旁白：填写备注\n在 "备注" 输入 "请 输入 名称"', config);
 
   assert.deepEqual(timeline.segments[0].actions, [
-    { type: 'fill', text: '备注', value: '请 输入 名称' },
+    { type: 'semanticFill', target: { kind: 'field', name: '备注' }, value: '请 输入 名称' },
   ]);
 });
 
@@ -98,6 +98,22 @@ test('parseVideoScript parses selector wait, hidden wait, and scroll-to-selector
       type: 'scrollTo',
       target: { type: 'selector', value: 'a[href*="custom-dimensions-tray-boxes-dieline-128020"]' },
     },
+  ]);
+});
+
+test('parseVideoScript parses semantic web interaction actions', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：填写并提交表单
+点击按钮 登录
+在 邮箱 输入 demo@example.com
+选择 销售类型 平台团购
+等待出现 登录成功`, config);
+
+  assert.deepEqual(timeline.segments[0]?.actions, [
+    { type: 'semanticClick', target: { kind: 'button', name: '登录' } },
+    { type: 'semanticFill', target: { kind: 'field', name: '邮箱' }, value: 'demo@example.com' },
+    { type: 'semanticSelect', target: { kind: 'field', name: '销售类型' }, option: '平台团购' },
+    { type: 'semanticWaitFor', target: { kind: 'visibleText', name: '登录成功' } },
   ]);
 });
 

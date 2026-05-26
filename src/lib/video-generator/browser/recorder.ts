@@ -128,8 +128,13 @@ export async function recordTimelineSegments({
     throw new VideoGeneratorError(
       error instanceof VideoGeneratorError ? error.code : 'UNSUPPORTED_SCRIPT_ACTION',
       `Failed to record segment ${segmentId}; ${screenshotMessage}: ${errorMessage(error)}`,
-      currentSegment?.id,
-      error instanceof VideoGeneratorError ? error.failedAction ?? currentAction : currentAction,
+      {
+        segmentId: currentSegment?.id,
+        failedAction: error instanceof VideoGeneratorError ? error.failedAction ?? currentAction : currentAction,
+        failureReason: error instanceof VideoGeneratorError ? error.failureReason : undefined,
+        candidates: error instanceof VideoGeneratorError ? error.candidates : undefined,
+        candidateReportPath: error instanceof VideoGeneratorError ? error.candidateReportPath : undefined,
+      },
     );
   } finally {
     await context?.close().catch(() => undefined);

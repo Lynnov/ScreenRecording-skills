@@ -116,6 +116,27 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
       validateSelectorWaitTarget(action.target, segmentId);
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
+    case 'semanticClick':
+      validateSemanticTarget(action.target, ['button', 'link'], segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'semanticFill':
+      if (typeof action.value !== 'string' || !action.value) {
+        throw new VideoGeneratorError('INVALID_FILL_VALUE', 'Semantic fill action must include a value.', segmentId);
+      }
+      validateSemanticTarget(action.target, ['field'], segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'semanticSelect':
+      if (typeof action.option !== 'string' || !action.option) {
+        throw new VideoGeneratorError('INVALID_FILL_VALUE', 'Semantic select action must include an option.', segmentId);
+      }
+      validateSemanticTarget(action.target, ['field'], segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'semanticWaitFor':
+      validateSemanticTarget(action.target, ['visibleText'], segmentId);
+      return;
     default:
       throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', 'Unsupported browser action type.', segmentId);
   }
@@ -124,6 +145,16 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
 function hasTextOrSelector(action: { text?: unknown; selector?: unknown }): boolean {
   return (typeof action.text === 'string' && Boolean(action.text.trim()))
     || (typeof action.selector === 'string' && Boolean(action.selector.trim()));
+}
+
+function validateSemanticTarget(target: unknown, allowedKinds: string[], segmentId: string | undefined): void {
+  if (!isRecord(target)
+    || typeof target.kind !== 'string'
+    || !allowedKinds.includes(target.kind)
+    || typeof target.name !== 'string'
+    || !target.name.trim()) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', 'Semantic action target is invalid.', segmentId);
+  }
 }
 
 function validateOptionalWaitFor(waitFor: unknown, segmentId: string | undefined): void {

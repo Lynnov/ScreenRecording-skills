@@ -82,7 +82,8 @@ export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<
     return report;
   } catch (error) {
     const report = makeFailureReport(outputDir, error);
-    await writeRunReport(report);
+    const result = await writeRunReport(report);
+    report.candidateReportPath = result.candidateReportPath ?? report.candidateReportPath;
     return report;
   }
 }
@@ -152,6 +153,9 @@ function makeFailureReport(outputDir: string, error: unknown): RunReport {
     errorMessage: error instanceof Error ? error.message : String(error),
     screenshotPath: extractScreenshotPath(error),
     failedAction: extractFailedAction(error),
+    failureReason: extractFailureReason(error),
+    candidates: extractCandidates(error),
+    candidateReportPath: extractCandidateReportPath(error),
   };
 }
 
@@ -182,6 +186,58 @@ function extractScreenshotPath(error: unknown): string | undefined {
   return message.match(/screenshot saved to (.+?)(?::|$)/)?.[1];
 }
 
+function extractFailureReason(error: unknown): RunReport['failureReason'] {
+  if (error instanceof VideoGeneratorError) {
+    return error.failureReason;
+  }
+
+  const failureReason = readStringProperty(error, 'failureReason');
+  return isSemanticFailureReason(failureReason) ? failureReason : undefined;
+}
+
+function extractCandidates(error: unknown): RunReport['candidates'] {
+  if (error instanceof VideoGeneratorError) {
+    return error.candidates;
+  }
+
+  const failureReason = extractFailureReason(error);
+  if (failureReason === undefined) {
+    return undefined;
+  }
+
+  const candidates = readArrayProperty(error, 'candidates');
+  return candidates?.every(isActionCandidateReport) === true ? candidates : undefined;
+}
+
+function extractCandidateReportPath(error: unknown): string | undefined {
+  if (error instanceof VideoGeneratorError) {
+    return error.candidateReportPath;
+  }
+
+  return readStringProperty(error, 'candidateReportPath');
+}
+
+function isSemanticFailureReason(value: unknown): value is NonNullable<RunReport['failureReason']> {
+  return value === 'NO_TARGET_FOUND'
+    || value === 'AMBIGUOUS_TARGET'
+    || value === 'LOW_CONFIDENCE_TARGET'
+    || value === 'TARGET_OCCLUDED'
+    || value === 'UNSUPPORTED_INTERACTION_PATTERN'
+    || value === 'RISKY_ACTION_REQUIRES_EXPLICIT_CONFIRMATION';
+}
+
+function isActionCandidateReport(value: unknown): value is NonNullable<RunReport['candidates']>[number] {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.label === 'string' && candidate.label.length > 0
+    && typeof candidate.name === 'string' && candidate.name.length > 0
+    && typeof candidate.layer === 'string' && candidate.layer.length > 0
+    && typeof candidate.confidence === 'string' && candidate.confidence.length > 0;
+}
+
 function readObjectProperty(value: unknown, property: string): object | undefined {
   if (typeof value !== 'object' || value === null || !(property in value)) {
     return undefined;
@@ -189,6 +245,15 @@ function readObjectProperty(value: unknown, property: string): object | undefine
 
   const propertyValue = (value as Record<string, unknown>)[property];
   return typeof propertyValue === 'object' && propertyValue !== null ? propertyValue : undefined;
+}
+
+function readArrayProperty(value: unknown, property: string): unknown[] | undefined {
+  if (typeof value !== 'object' || value === null || !(property in value)) {
+    return undefined;
+  }
+
+  const propertyValue = (value as Record<string, unknown>)[property];
+  return Array.isArray(propertyValue) ? propertyValue : undefined;
 }
 
 function readStringProperty(value: unknown, property: string): string | undefined {

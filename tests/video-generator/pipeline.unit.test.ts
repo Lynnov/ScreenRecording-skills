@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { runVideoGenerator } from '../../src/lib/video-generator/pipeline.js';
-import type { Timeline } from '../../src/lib/video-generator/types.js';
+import { VideoGeneratorError, type Timeline } from '../../src/lib/video-generator/types.js';
 import type { TtsProvider } from '../../src/lib/video-generator/tts/types.js';
 
 async function makeScriptFile(outputDir: string): Promise<string> {
@@ -200,6 +200,116 @@ test('runVideoGenerator writes failed action into failure report', async () => {
 
     const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
     assert.deepEqual(written.failedAction, failedAction);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('runVideoGenerator ignores untrusted candidates on plain errors', async () => {
+  const outputDir = path.join(tmpdir(), `pipeline-untrusted-candidates-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const scriptPath = await makeScriptFile(outputDir);
+  const ttsProvider: TtsProvider = {
+    async synthesize(request) {
+      await writeFile(request.outputPath, `audio:${request.segmentId}`);
+      return { segmentId: request.segmentId, audioPath: request.outputPath, durationMs: 1000 };
+    },
+  };
+
+  try {
+    const report = await runVideoGenerator({
+      scriptPath,
+      configOverrides: { outputDir },
+      deps: {
+        ttsProvider,
+        recordTimelineSegments: async () => {
+          const error = new Error('plain failure with spoofed candidates');
+          Object.assign(error, {
+            segmentId: 'seg-002',
+            failureReason: 'AMBIGUOUS_TARGET',
+            candidates: [{ name: 'Submit' }],
+          });
+          throw error;
+        },
+        renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
+      },
+    });
+
+    assert.equal(report.ok, false);
+    assert.equal(report.failureReason, 'AMBIGUOUS_TARGET');
+    assert.equal(report.candidates, undefined);
+    assert.equal(report.candidateReportPath, undefined);
+    assert.equal(existsSync(path.join(outputDir, 'candidate-report.json')), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('runVideoGenerator writes candidate report for semantic recording failure', async () => {
+  const outputDir = path.join(tmpdir(), `pipeline-candidate-failure-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const scriptPath = await makeScriptFile(outputDir);
+  const failedAction = { type: 'semanticClick' as const, target: { kind: 'button' as const, name: 'Submit' } };
+  const screenshotPath = path.join(outputDir, 'screenshots', 'seg-002.png');
+  const candidates = [
+    {
+      label: 'Submit button',
+      role: 'button',
+      name: 'Submit',
+      text: 'Submit',
+      layer: 'page' as const,
+      confidence: 'medium' as const,
+      selectorHint: 'button:nth-of-type(2)',
+    },
+  ];
+  const ttsProvider: TtsProvider = {
+    async synthesize(request) {
+      await writeFile(request.outputPath, `audio:${request.segmentId}`);
+      return { segmentId: request.segmentId, audioPath: request.outputPath, durationMs: 1000 };
+    },
+  };
+
+  try {
+    const report = await runVideoGenerator({
+      scriptPath,
+      configOverrides: { outputDir },
+      deps: {
+        ttsProvider,
+        recordTimelineSegments: async () => {
+          const error = new VideoGeneratorError('INVALID_CLICK_TARGET', 'Ambiguous semantic target', {
+            segmentId: 'seg-002',
+            failedAction,
+            failureReason: 'AMBIGUOUS_TARGET',
+            candidates,
+          });
+          Object.assign(error, { screenshotPath });
+          throw error;
+        },
+        renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
+      },
+    });
+
+    assert.equal(report.ok, false);
+    assert.equal(report.failedSegmentId, 'seg-002');
+    assert.deepEqual(report.failedAction, failedAction);
+    assert.equal(report.failureReason, 'AMBIGUOUS_TARGET');
+    assert.deepEqual(report.candidates, candidates);
+    assert.equal(report.screenshotPath, screenshotPath);
+    assert.equal(report.candidateReportPath, path.join(outputDir, 'candidate-report.json'));
+
+    const writtenRunReport = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
+    assert.equal(writtenRunReport.candidateReportPath, report.candidateReportPath);
+    assert.equal(writtenRunReport.failureReason, report.failureReason);
+    assert.deepEqual(writtenRunReport.candidates, candidates);
+
+    const writtenCandidateReport = JSON.parse(await readFile(path.join(outputDir, 'candidate-report.json'), 'utf8'));
+    assert.deepEqual(writtenCandidateReport, {
+      failureReason: report.failureReason,
+      failedSegmentId: report.failedSegmentId,
+      failedAction,
+      candidates,
+      screenshotPath,
+    });
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }

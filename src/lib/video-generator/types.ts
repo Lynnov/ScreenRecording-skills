@@ -5,13 +5,45 @@ export type WaitTarget =
   | { type: 'url'; value: string }
   | { type: 'networkIdle' };
 
+export type SemanticActionTarget =
+  | { kind: 'button'; name: string }
+  | { kind: 'link'; name: string }
+  | { kind: 'field'; name: string }
+  | { kind: 'visibleText'; name: string };
+
+export type CandidateLayer = 'page' | 'dialog' | 'drawer' | 'popover' | 'dropdown' | 'toast' | 'overlay';
+
+export type CandidateConfidence = 'strong' | 'medium' | 'weak';
+
+export interface ActionCandidateReport {
+  label: string;
+  role?: string;
+  name: string;
+  text?: string;
+  layer: CandidateLayer;
+  confidence: CandidateConfidence;
+  selectorHint?: string;
+}
+
+export type SemanticFailureReason =
+  | 'NO_TARGET_FOUND'
+  | 'AMBIGUOUS_TARGET'
+  | 'LOW_CONFIDENCE_TARGET'
+  | 'TARGET_OCCLUDED'
+  | 'UNSUPPORTED_INTERACTION_PATTERN'
+  | 'RISKY_ACTION_REQUIRES_EXPLICIT_CONFIRMATION';
+
 export type BrowserAction =
   | { type: 'goto'; url: string; waitFor?: WaitTarget }
   | { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget }
   | { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget }
   | { type: 'waitFor'; target: WaitTarget }
   | { type: 'scroll'; y: number; waitFor?: WaitTarget }
-  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget };
+  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget }
+  | { type: 'semanticClick'; target: Extract<SemanticActionTarget, { kind: 'button' | 'link' }>; waitFor?: WaitTarget }
+  | { type: 'semanticFill'; target: Extract<SemanticActionTarget, { kind: 'field' }>; value: string; waitFor?: WaitTarget }
+  | { type: 'semanticSelect'; target: Extract<SemanticActionTarget, { kind: 'field' }>; option: string; waitFor?: WaitTarget }
+  | { type: 'semanticWaitFor'; target: Extract<SemanticActionTarget, { kind: 'visibleText' }> };
 
 export interface TimelineSegmentAssets {
   audioPath?: string;
@@ -19,6 +51,15 @@ export interface TimelineSegmentAssets {
   screenshotPath?: string;
   videoStartMs?: number;
   videoEndMs?: number;
+  resolvedActions?: Array<{
+    actionIndex: number;
+    strategy: string;
+    confidence: CandidateConfidence;
+    role?: string;
+    name: string;
+    layer: CandidateLayer;
+    selectorHint?: string;
+  }>;
   [key: string]: unknown;
 }
 
@@ -71,6 +112,9 @@ export interface RunReport {
   subtitlesPath?: string;
   failedSegmentId?: string;
   failedAction?: BrowserAction;
+  failureReason?: SemanticFailureReason;
+  candidates?: ActionCandidateReport[];
+  candidateReportPath?: string;
   errorMessage?: string;
   screenshotPath?: string;
 }
@@ -100,16 +144,42 @@ export type VideoGeneratorErrorCode =
   | 'TTS_SYNTHESIS_FAILED'
   | 'TTS_PROVIDER_NOT_IMPLEMENTED';
 
+export interface VideoGeneratorErrorDetails {
+  segmentId?: string;
+  failedAction?: BrowserAction;
+  failureReason?: SemanticFailureReason;
+  candidates?: ActionCandidateReport[];
+  candidateReportPath?: string;
+}
+
 export class VideoGeneratorError extends Error {
   readonly code: VideoGeneratorErrorCode;
   readonly segmentId?: string;
   readonly failedAction?: BrowserAction;
+  readonly failureReason?: SemanticFailureReason;
+  readonly candidates?: ActionCandidateReport[];
+  readonly candidateReportPath?: string;
 
-  constructor(code: VideoGeneratorErrorCode, message: string, segmentId?: string, failedAction?: BrowserAction) {
+  constructor(
+    code: VideoGeneratorErrorCode,
+    message: string,
+    segmentIdOrDetails?: string | VideoGeneratorErrorDetails,
+    failedAction?: BrowserAction,
+  ) {
     super(message);
     this.name = 'VideoGeneratorError';
     this.code = code;
-    this.segmentId = segmentId;
+
+    if (typeof segmentIdOrDetails === 'object' && segmentIdOrDetails !== null) {
+      this.segmentId = segmentIdOrDetails.segmentId;
+      this.failedAction = segmentIdOrDetails.failedAction;
+      this.failureReason = segmentIdOrDetails.failureReason;
+      this.candidates = segmentIdOrDetails.candidates;
+      this.candidateReportPath = segmentIdOrDetails.candidateReportPath;
+      return;
+    }
+
+    this.segmentId = segmentIdOrDetails;
     this.failedAction = failedAction;
   }
 }

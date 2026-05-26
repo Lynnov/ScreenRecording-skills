@@ -896,3 +896,44 @@ test('recordTimelineSegments screenshots failed segment actions', async () => {
     await rm(outputDir, { recursive: true, force: true });
   }
 });
+
+test('recordTimelineSegments preserves semantic failure details when wrapping recorder errors', async () => {
+  const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-semantic-fail-'));
+
+  try {
+    const timeline: Timeline = {
+      version: 1,
+      title: 'Recorder semantic failure',
+      segments: [
+        {
+          id: 'ambiguous-click',
+          sourceText: 'ambiguous',
+          narration: 'ambiguous',
+          subtitle: 'ambiguous',
+          estimatedDurationMs: 100,
+          bufferMs: 0,
+          actions: [
+            { type: 'goto', url: demoDataUrl('<main><button>Submit</button><button>Submit</button></main>') },
+            { type: 'semanticClick', target: { kind: 'button', name: 'Submit' } },
+          ],
+          assets: {},
+        },
+      ],
+    };
+
+    await assert.rejects(
+      () => recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir }),
+      (error) => {
+        assert.ok(error instanceof VideoGeneratorError);
+        assert.equal(error.segmentId, 'ambiguous-click');
+        assert.equal(error.failureReason, 'AMBIGUOUS_TARGET');
+        assert.equal(error.candidates?.length, 2);
+        assert.deepEqual(error.failedAction, { type: 'semanticClick', target: { kind: 'button', name: 'Submit' } });
+        assert.equal(existsSync(join(outputDir, 'screenshots', 'ambiguous-click.png')), true);
+        return true;
+      },
+    );
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
