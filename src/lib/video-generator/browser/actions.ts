@@ -1,5 +1,8 @@
 import type { Locator, Page } from 'playwright';
-import { VideoGeneratorError, type BrowserAction, type WaitTarget } from '../types.js';
+import { VideoGeneratorError, type ActionCandidateReport, type BrowserAction, type WaitTarget } from '../types.js';
+import { matchSemanticAction } from './candidate-matcher.js';
+import { clickCandidate, fillFieldByName, selectOptionByFieldName, waitAfterSemanticAction } from './interaction-rules.js';
+import { capturePageSnapshot, type PageSnapshot } from './page-snapshot.js';
 
 export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<Page> {
   try {
@@ -56,6 +59,68 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         await waitForTarget(page, action.target, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
+      case 'semanticClick': {
+        const snapshot = await capturePageSnapshot(page);
+        const match = matchSemanticAction(action, snapshot);
+        if (!match.ok) {
+          throw new VideoGeneratorError('INVALID_CLICK_TARGET', semanticMatchFailureMessage(action, match), {
+            failedAction: action,
+            failureReason: match.reason,
+            candidates: match.candidates,
+          });
+        }
+
+        await clickCandidate(page, match.candidate, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        await waitAfterSemanticAction(page, timeoutMs);
+        return page;
+      }
+      case 'semanticFill': {
+        const snapshot = await capturePageSnapshot(page);
+        const match = matchSemanticAction(action, snapshot);
+        if (!match.ok) {
+          throw new VideoGeneratorError('INVALID_FILL_TARGET', match.message, {
+            failedAction: action,
+            failureReason: match.reason,
+            candidates: match.candidates,
+          });
+        }
+
+        await fillFieldByName(page, match.candidate, action.value, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        await waitAfterSemanticAction(page, timeoutMs);
+        return page;
+      }
+      case 'semanticSelect': {
+        const snapshot = await capturePageSnapshot(page);
+        const match = matchSemanticAction(action, snapshot);
+        if (!match.ok) {
+          throw new VideoGeneratorError('INVALID_CLICK_TARGET', match.message, {
+            failedAction: action,
+            failureReason: match.reason,
+            candidates: match.candidates,
+          });
+        }
+
+        await selectOptionByFieldName(page, match.candidate, action.option, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        await waitAfterSemanticAction(page, timeoutMs);
+        return page;
+      }
+      case 'semanticWaitFor': {
+        try {
+          await page.getByText(action.target.name, { exact: true }).waitFor({ state: 'visible', timeout: timeoutMs });
+          return page;
+        } catch (error) {
+          const snapshot = await capturePageSnapshot(page).catch(() => undefined);
+          const match = snapshot !== undefined ? matchSemanticAction(action, snapshot) : undefined;
+          throw new VideoGeneratorError('INVALID_WAIT_TARGET', semanticWaitFailureMessage(action, error), {
+            failedAction: action,
+            failureReason: match?.ok ? 'TARGET_OCCLUDED' : match?.reason,
+            candidates: waitFailureCandidates(snapshot, action),
+          });
+        }
+      }
       default:
         throw new VideoGeneratorError(
           'UNSUPPORTED_SCRIPT_ACTION',
@@ -284,6 +349,14 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
     case 'scroll':
     case 'scrollTo':
       return 'INVALID_SCROLL_Y';
+    case 'semanticClick':
+      return 'INVALID_CLICK_TARGET';
+    case 'semanticFill':
+      return 'INVALID_FILL_TARGET';
+    case 'semanticSelect':
+      return 'INVALID_CLICK_TARGET';
+    case 'semanticWaitFor':
+      return 'INVALID_WAIT_TARGET';
   }
 }
 
@@ -301,7 +374,70 @@ function describeAction(action: BrowserAction): string {
       return `scroll y=${action.y}`;
     case 'scrollTo':
       return `scrollTo ${describeWaitTarget(action.target)}`;
+    case 'semanticClick':
+      return `semanticClick ${action.target.kind} ${action.target.name}`;
+    case 'semanticFill':
+      return `semanticFill ${action.target.name}`;
+    case 'semanticSelect':
+      return `semanticSelect ${action.target.name} ${action.option}`;
+    case 'semanticWaitFor':
+      return `semanticWaitFor ${action.target.name}`;
   }
+}
+
+function semanticMatchFailureMessage(
+  action: Extract<BrowserAction, { type: 'semanticClick' }>,
+  match: Extract<ReturnType<typeof matchSemanticAction>, { ok: false }>,
+): string {
+  if (match.reason === 'AMBIGUOUS_TARGET') {
+    return `找到 ${match.candidates.length} 个可能的“${action.target.name}”目标，请提供更明确的目标。`;
+  }
+
+  return match.message;
+}
+
+function semanticWaitFailureMessage(action: Extract<BrowserAction, { type: 'semanticWaitFor' }>, error: unknown): string {
+  const baseMessage = errorMessage(error);
+  return `semanticWaitFor ${action.target.name} timed out: ${baseMessage}`;
+}
+
+function waitFailureCandidates(snapshot: PageSnapshot | undefined, action: Extract<BrowserAction, { type: 'semanticWaitFor' }>): ActionCandidateReport[] | undefined {
+  if (snapshot === undefined) {
+    return undefined;
+  }
+
+  const normalizedTarget = action.target.name.trim().toLowerCase();
+  const matchingCandidates = snapshot.candidates
+    .filter((candidate) => candidate.state.visible)
+    .filter((candidate) => candidate.name.trim().toLowerCase().includes(normalizedTarget) || (candidate.text ?? '').trim().toLowerCase().includes(normalizedTarget))
+    .map((candidate) => ({
+      label: [candidate.context, candidate.name || candidate.text].filter(Boolean).join(' / ')
+        || candidate.selectorHint
+        || candidate.role
+        || 'unknown',
+      role: candidate.role,
+      name: candidate.name,
+      text: candidate.text,
+      layer: candidate.layer,
+      confidence: 'weak' as const,
+      selectorHint: candidate.selectorHint,
+    }));
+
+  return matchingCandidates.length > 0 ? matchingCandidates : snapshot.candidates
+    .filter((candidate) => candidate.state.visible)
+    .slice(0, 5)
+    .map((candidate) => ({
+      label: [candidate.context, candidate.name || candidate.text].filter(Boolean).join(' / ')
+        || candidate.selectorHint
+        || candidate.role
+        || 'unknown',
+      role: candidate.role,
+      name: candidate.name,
+      text: candidate.text,
+      layer: candidate.layer,
+      confidence: 'weak' as const,
+      selectorHint: candidate.selectorHint,
+    }));
 }
 
 function describeWaitTarget(target: WaitTarget): string {

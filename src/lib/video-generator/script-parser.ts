@@ -75,6 +75,16 @@ function parseAction(line: string): BrowserAction {
     return { type: 'click', selector: stripWrappingQuotes(clickSelectorMatch[1]) };
   }
 
+  const semanticButtonClickMatch = line.match(/^点击按钮\s+(.+)$/u);
+  if (semanticButtonClickMatch) {
+    return { type: 'semanticClick', target: { kind: 'button', name: stripWrappingQuotes(semanticButtonClickMatch[1]) } };
+  }
+
+  const semanticLinkClickMatch = line.match(/^点击链接\s+(.+)$/u);
+  if (semanticLinkClickMatch) {
+    return { type: 'semanticClick', target: { kind: 'link', name: stripWrappingQuotes(semanticLinkClickMatch[1]) } };
+  }
+
   const clickMatch = line.match(/^点击\s+(.+)$/u);
   if (clickMatch) {
     return { type: 'click', text: stripWrappingQuotes(clickMatch[1]) };
@@ -85,6 +95,11 @@ function parseAction(line: string): BrowserAction {
     return fillAction;
   }
 
+  const selectAction = parseSemanticSelectAction(line);
+  if (selectAction) {
+    return selectAction;
+  }
+
   const waitForSelectorMatch = line.match(/^等待选择器\s+(.+)$/u);
   if (waitForSelectorMatch) {
     return { type: 'waitFor', target: { type: 'selector', value: stripWrappingQuotes(waitForSelectorMatch[1]) } };
@@ -93,6 +108,11 @@ function parseAction(line: string): BrowserAction {
   const waitForHiddenSelectorMatch = line.match(/^等待隐藏选择器\s+(.+)$/u);
   if (waitForHiddenSelectorMatch) {
     return { type: 'waitFor', target: { type: 'hiddenSelector', value: stripWrappingQuotes(waitForHiddenSelectorMatch[1]) } };
+  }
+
+  const semanticWaitForMatch = line.match(/^等待出现\s+(.+)$/u);
+  if (semanticWaitForMatch) {
+    return { type: 'semanticWaitFor', target: { kind: 'visibleText', name: stripWrappingQuotes(semanticWaitForMatch[1]) } };
   }
 
   const waitForMatch = line.match(/^等待\s+(.+)$/u);
@@ -142,7 +162,11 @@ function parseFillAction(line: string): BrowserAction | undefined {
       return undefined;
     }
 
-    return { type: 'fill', text: quotedTarget.value, value: stripWrappingQuotes(rest.slice('输入 '.length)) };
+    return {
+      type: 'semanticFill',
+      target: { kind: 'field', name: quotedTarget.value },
+      value: stripWrappingQuotes(rest.slice('输入 '.length)),
+    };
   }
 
   const separator = ' 输入 ';
@@ -152,10 +176,47 @@ function parseFillAction(line: string): BrowserAction | undefined {
   }
 
   return {
-    type: 'fill',
-    text: stripWrappingQuotes(afterPrefix.slice(0, separatorIndex)),
+    type: 'semanticFill',
+    target: { kind: 'field', name: stripWrappingQuotes(afterPrefix.slice(0, separatorIndex)) },
     value: stripWrappingQuotes(afterPrefix.slice(separatorIndex + separator.length)),
   };
+}
+
+function parseSemanticSelectAction(line: string): BrowserAction | undefined {
+  if (!line.startsWith('选择 ')) {
+    return undefined;
+  }
+
+  const afterPrefix = line.slice('选择 '.length).trimStart();
+  const field = readFirstToken(afterPrefix);
+  if (!field) {
+    return undefined;
+  }
+
+  const option = afterPrefix.slice(field.length).trimStart();
+  if (!option) {
+    return undefined;
+  }
+
+  return {
+    type: 'semanticSelect',
+    target: { kind: 'field', name: field.value },
+    option: stripWrappingQuotes(option),
+  };
+}
+
+function readFirstToken(input: string): { value: string; length: number } | undefined {
+  const quotedToken = readQuotedToken(input);
+  if (quotedToken) {
+    return quotedToken;
+  }
+
+  const match = input.match(/^\S+/u);
+  if (!match) {
+    return undefined;
+  }
+
+  return { value: stripWrappingQuotes(match[0]), length: match[0].length };
 }
 
 function readQuotedToken(input: string): { value: string; length: number } | undefined {
