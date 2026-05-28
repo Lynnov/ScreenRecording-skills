@@ -1,7 +1,10 @@
 import type { Locator, Page } from 'playwright';
+import { redactBrowserActionInMessage } from '../action-redaction.js';
 import { VideoGeneratorError, type BrowserAction, type WaitTarget } from '../types.js';
+import { createNoopCursorOverlayController, type CursorOverlayController } from './cursor-overlay.js';
+import { remoteSelect, resolveActionTarget, selectFirst, uploadFile } from './interaction-rules.js';
 
-export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<Page> {
+export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number, cursor: CursorOverlayController = createNoopCursorOverlayController()): Promise<Page> {
   try {
     switch (action.type) {
       case 'goto':
@@ -32,6 +35,13 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
       }
+      case 'hover': {
+        const locator = await resolveActionTarget(page, action, timeoutMs);
+        await cursor.moveToLocator(locator, timeoutMs);
+        await locator.hover({ timeout: timeoutMs });
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      }
       case 'fill':
         if (action.selector !== undefined) {
           await fillLocator(page.locator(action.selector), action.value, timeoutMs);
@@ -40,6 +50,14 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         } else {
           throw new VideoGeneratorError('INVALID_FILL_TARGET', 'fill action requires text or selector.');
         }
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      case 'remoteSelect':
+        await remoteSelect(page, action, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      case 'selectFirst':
+        await selectFirst(page, action, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
       case 'waitFor':
@@ -55,6 +73,10 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         await waitForTarget(page, action.target, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
+      case 'uploadFile':
+        await uploadFile(page, action, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
       default:
         throw new VideoGeneratorError(
           'UNSUPPORTED_SCRIPT_ACTION',
@@ -68,7 +90,7 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
 
     throw new VideoGeneratorError(
       actionErrorCode(action),
-      `Browser action failed (${describeAction(action)}): ${errorMessage(error)}`,
+      redactBrowserActionInMessage(`Browser action failed (${describeAction(action)}): ${errorMessage(error)}`),
     );
   }
 }
@@ -77,7 +99,7 @@ export async function waitForTarget(page: Page, target: WaitTarget, timeoutMs: n
   try {
     switch (target.type) {
       case 'text':
-        await page.getByText(target.value, { exact: true }).waitFor({ state: 'visible', timeout: timeoutMs });
+        await page.getByText(target.value, { exact: true }).first().waitFor({ state: 'visible', timeout: timeoutMs });
         return;
       case 'selector':
         await page.locator(target.value).waitFor({ state: 'visible', timeout: timeoutMs });
@@ -113,6 +135,15 @@ async function targetBlankHref(locator: Locator, timeoutMs: number): Promise<str
     const anchor = element.closest('a');
     return anchor?.target === '_blank' && anchor.href ? anchor.href : undefined;
   }, undefined, { timeout: timeoutMs });
+}
+
+async function moveMouseToLocator(locator: Locator, timeoutMs: number): Promise<void> {
+  const box = await locator.boundingBox({ timeout: timeoutMs });
+  if (box === null) {
+    return;
+  }
+
+  await locator.page().mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 async function waitForAllLocatorsHidden(locator: Locator, timeoutMs: number): Promise<void> {
@@ -174,13 +205,21 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
       return 'INVALID_GOTO_URL';
     case 'click':
       return 'INVALID_CLICK_TARGET';
+    case 'hover':
+      return 'INVALID_HOVER_TARGET';
     case 'fill':
       return 'INVALID_FILL_TARGET';
+    case 'remoteSelect':
+      return 'INVALID_REMOTE_SELECT_TARGET';
+    case 'selectFirst':
+      return 'INVALID_SELECT_FIRST_TARGET';
     case 'waitFor':
       return 'INVALID_WAIT_TARGET';
     case 'scroll':
     case 'scrollTo':
       return 'INVALID_SCROLL_Y';
+    case 'uploadFile':
+      return 'INVALID_UPLOAD_FILE_TARGET';
   }
 }
 
@@ -190,14 +229,22 @@ function describeAction(action: BrowserAction): string {
       return `goto url=${action.url}`;
     case 'click':
       return `click ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'hover':
+      return `hover ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
     case 'fill':
       return `fill ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'remoteSelect':
+      return `remoteSelect ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'selectFirst':
+      return `selectFirst ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
     case 'waitFor':
       return `waitFor ${describeWaitTarget(action.target)}`;
     case 'scroll':
       return `scroll y=${action.y}`;
     case 'scrollTo':
       return `scrollTo ${describeWaitTarget(action.target)}`;
+    case 'uploadFile':
+      return `uploadFile ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`} path=[redacted]`;
   }
 }
 

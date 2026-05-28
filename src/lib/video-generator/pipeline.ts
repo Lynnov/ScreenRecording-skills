@@ -1,10 +1,12 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { mergeAudioSegments, type MergeAudioSegmentsInput } from './audio.js';
+import { createRunArtifacts, ensureRunArtifactDirs } from './artifacts.js';
 import { loadVideoGeneratorConfig, type VideoGeneratorConfigOverrides } from './config.js';
 import { renderFinalVideo, type RenderFinalVideoInput } from './ffmpeg.js';
 import { recordTimelineSegments, type RecordTimelineSegmentsInput } from './browser/recorder.js';
+import { redactBrowserAction } from './action-redaction.js';
 import { writeRunReport } from './report.js';
 import { parseVideoScript } from './script-parser.js';
 import { renderSrt } from './subtitles.js';
@@ -28,10 +30,11 @@ export interface RunVideoGeneratorInput {
 export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<RunReport> {
   const config = loadVideoGeneratorConfig(input.configOverrides);
   const outputDir = config.outputDir;
-  const audioDir = path.join(outputDir, 'audio');
+  const artifacts = createRunArtifacts(outputDir);
+  const audioDir = artifacts.audioDir;
 
   try {
-    await mkdir(audioDir, { recursive: true });
+    await ensureRunArtifactDirs(artifacts);
     const script = await readFile(input.scriptPath, 'utf8');
     const parsedTimeline = parseVideoScript(script, config);
     const timelineWithAudio = await synthesizeTimelineAudio({
@@ -78,11 +81,11 @@ export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<
       timelinePath,
       subtitlesPath,
     };
-    await writeRunReport(report);
+    await writeRunReport(report, artifacts.runReportPath);
     return report;
   } catch (error) {
     const report = makeFailureReport(outputDir, error);
-    await writeRunReport(report);
+    await writeRunReport(report, artifacts.runReportPath);
     return report;
   }
 }
@@ -165,11 +168,11 @@ function extractSegmentId(error: unknown): string | undefined {
 
 function extractFailedAction(error: unknown): RunReport['failedAction'] {
   if (error instanceof VideoGeneratorError) {
-    return error.failedAction;
+    return redactBrowserAction(error.failedAction);
   }
 
   const failedAction = readObjectProperty(error, 'failedAction');
-  return failedAction as RunReport['failedAction'];
+  return redactBrowserAction(failedAction as RunReport['failedAction']);
 }
 
 function extractScreenshotPath(error: unknown): string | undefined {

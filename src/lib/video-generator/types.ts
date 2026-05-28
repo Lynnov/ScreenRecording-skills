@@ -8,10 +8,14 @@ export type WaitTarget =
 export type BrowserAction =
   | { type: 'goto'; url: string; waitFor?: WaitTarget }
   | { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget }
+  | { type: 'hover'; text?: string; selector?: string; waitFor?: WaitTarget }
   | { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget }
+  | { type: 'remoteSelect'; text?: string; selector?: string; query: string; option?: string; selectFirst?: boolean; waitFor?: WaitTarget }
+  | { type: 'selectFirst'; text?: string; selector?: string; waitFor?: WaitTarget }
   | { type: 'waitFor'; target: WaitTarget }
   | { type: 'scroll'; y: number; waitFor?: WaitTarget }
-  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget };
+  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget }
+  | { type: 'uploadFile'; text?: string; selector?: string; path: string; waitFor?: WaitTarget };
 
 export interface TimelineSegmentAssets {
   audioPath?: string;
@@ -63,9 +67,64 @@ export interface VideoGeneratorConfig {
   storageStatePath?: string;
 }
 
+export type VideoGeneratorMode = 'generate' | 'dryRun';
+
+export type ScriptDraftRole = 'original' | 'polished' | 'executable';
+
+export interface ScriptDraftEntry {
+  role: ScriptDraftRole;
+  path: string;
+  sourcePath: string;
+  overwriteAllowed: boolean;
+}
+
+export interface ScriptDraftManifest {
+  version: 1;
+  sourceScriptPath: string;
+  createdAt: string;
+  overwriteAllowed: boolean;
+  businessDataProtectionNotice: string;
+  protectedBusinessTerms: string[];
+  drafts: Record<ScriptDraftRole, ScriptDraftEntry>;
+  manifestPath?: string;
+}
+
+export type PreflightCheckStatus = 'passed' | 'failed' | 'skipped';
+
+export interface ActionCandidateReport {
+  tagName: string;
+  text?: string;
+  role?: string;
+  ariaLabel?: string;
+  placeholder?: string;
+  selector?: string;
+}
+
+export interface PreflightCheck {
+  name: string;
+  status: PreflightCheckStatus;
+  message: string;
+  segmentId?: string;
+  actionIndex?: number;
+  screenshotPath?: string;
+  candidates?: ActionCandidateReport[];
+}
+
+export interface PreflightReport {
+  ok: boolean;
+  outputDir: string;
+  scriptPath: string;
+  storageStatePath?: string;
+  checks: PreflightCheck[];
+  failedSegmentId?: string;
+  failedAction?: BrowserAction;
+  preflightReportPath?: string;
+}
+
 export interface RunReport {
   ok: boolean;
   outputDir: string;
+  preflightReportPath?: string;
   finalVideoPath?: string;
   timelinePath?: string;
   subtitlesPath?: string;
@@ -87,10 +146,16 @@ export type VideoGeneratorErrorCode =
   | 'INVALID_ENDS_AT'
   | 'INVALID_GOTO_URL'
   | 'INVALID_CLICK_TARGET'
+  | 'INVALID_HOVER_TARGET'
   | 'INVALID_FILL_TARGET'
   | 'INVALID_FILL_VALUE'
+  | 'INVALID_REMOTE_SELECT_TARGET'
+  | 'INVALID_SELECT_FIRST_TARGET'
   | 'INVALID_WAIT_TARGET'
   | 'INVALID_SCROLL_Y'
+  | 'INVALID_UPLOAD_FILE_TARGET'
+  | 'NO_TARGET_FOUND'
+  | 'UNSUPPORTED_INTERACTION_PATTERN'
   | 'MISSING_NARRATION'
   | 'MISSING_ACTION'
   | 'UNSUPPORTED_SCRIPT_ACTION'
@@ -104,12 +169,20 @@ export class VideoGeneratorError extends Error {
   readonly code: VideoGeneratorErrorCode;
   readonly segmentId?: string;
   readonly failedAction?: BrowserAction;
+  readonly candidates?: ActionCandidateReport[];
 
-  constructor(code: VideoGeneratorErrorCode, message: string, segmentId?: string, failedAction?: BrowserAction) {
+  constructor(
+    code: VideoGeneratorErrorCode,
+    message: string,
+    segmentId?: string,
+    failedAction?: BrowserAction,
+    candidates?: ActionCandidateReport[],
+  ) {
     super(message);
     this.name = 'VideoGeneratorError';
     this.code = code;
     this.segmentId = segmentId;
     this.failedAction = failedAction;
+    this.candidates = candidates;
   }
 }

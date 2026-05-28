@@ -4,15 +4,19 @@ import { fileURLToPath } from 'node:url';
 
 import { loadVideoGeneratorConfig } from '../lib/video-generator/config.js';
 import { runVideoGenerator, type RunVideoGeneratorInput } from '../lib/video-generator/pipeline.js';
+import { runPreflight, type RunPreflightInput } from '../lib/video-generator/preflight.js';
+import { prepareScriptDrafts, type PrepareScriptDraftsInput } from '../lib/video-generator/script-drafts.js';
 import { createAliyunTtsProvider } from '../lib/video-generator/tts/aliyun.js';
 import type { TtsProvider } from '../lib/video-generator/tts/types.js';
-import type { RunReport } from '../lib/video-generator/types.js';
+import type { PreflightReport, RunReport, ScriptDraftManifest } from '../lib/video-generator/types.js';
 
 export interface VideoGeneratorCliIo {
   stdout?: (message: string) => void;
   stderr?: (message: string) => void;
   env?: NodeJS.ProcessEnv;
   runVideoGenerator?: (input: RunVideoGeneratorInput) => Promise<RunReport>;
+  runPreflight?: (input: RunPreflightInput) => Promise<PreflightReport>;
+  prepareScriptDrafts?: (input: PrepareScriptDraftsInput) => Promise<ScriptDraftManifest>;
   createTtsProvider?: (env: NodeJS.ProcessEnv) => TtsProvider;
 }
 
@@ -20,6 +24,8 @@ interface ParsedArgs {
   scriptPath?: string;
   outputDir?: string;
   storageStatePath?: string;
+  dryRun?: boolean;
+  prepareScript?: boolean;
   ttsSmokeText?: string;
   error?: string;
 }
@@ -35,6 +41,11 @@ export async function runVideoGeneratorCli(argv: string[], io: VideoGeneratorCli
     return 1;
   }
 
+  if (parsed.prepareScript === true && parsed.dryRun === true) {
+    stderr(`--prepare-script cannot be used with --dry-run\n${usage()}`);
+    return 1;
+  }
+
   if (parsed.ttsSmokeText !== undefined) {
     return runTtsSmoke(parsed, { stdout, stderr, env, createTtsProvider: io.createTtsProvider ?? createAliyunTtsProvider });
   }
@@ -44,10 +55,35 @@ export async function runVideoGeneratorCli(argv: string[], io: VideoGeneratorCli
     return 1;
   }
 
+  if (parsed.prepareScript === true) {
+    return runPrepareScript(parsed, { stdout, stderr, prepareScriptDrafts: io.prepareScriptDrafts ?? prepareScriptDrafts });
+  }
+
   const configOverrides = {
     ...(parsed.outputDir === undefined ? {} : { outputDir: parsed.outputDir }),
     ...(parsed.storageStatePath === undefined ? {} : { storageStatePath: parsed.storageStatePath }),
   };
+
+  if (parsed.dryRun === true) {
+    let report: PreflightReport;
+    try {
+      report = await (io.runPreflight ?? runPreflight)({
+        scriptPath: parsed.scriptPath,
+        configOverrides: Object.keys(configOverrides).length === 0 ? undefined : configOverrides,
+      });
+    } catch (error) {
+      stderr(`Preflight failed.\n${error instanceof Error ? error.message : String(error)}`);
+      return 1;
+    }
+
+    if (!report.ok) {
+      stderr(formatPreflightFailure(report));
+      return 1;
+    }
+
+    stdout(`Preflight passed: ${report.preflightReportPath ?? report.outputDir}`);
+    return 0;
+  }
 
   let report: RunReport;
   try {
@@ -101,6 +137,14 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (arg === '--dry-run') {
+      parsed.dryRun = true;
+      continue;
+    }
+    if (arg === '--prepare-script') {
+      parsed.prepareScript = true;
+      continue;
+    }
     if (arg === '--tts-smoke') {
       const next = argv[index + 1];
       if (next !== undefined && !next.startsWith('--')) {
@@ -125,6 +169,37 @@ function readFlagValue(argv: string[], index: number, flag: string): { value: st
   }
 
   return { value };
+}
+
+async function runPrepareScript(parsed: ParsedArgs, input: {
+  stdout: (message: string) => void;
+  stderr: (message: string) => void;
+  prepareScriptDrafts: (draftInput: PrepareScriptDraftsInput) => Promise<ScriptDraftManifest>;
+}): Promise<number> {
+  if (parsed.scriptPath === undefined) {
+    input.stderr(usage());
+    return 1;
+  }
+
+  const config = loadVideoGeneratorConfig(parsed.outputDir === undefined ? undefined : { outputDir: parsed.outputDir });
+
+  try {
+    const manifest = await input.prepareScriptDrafts({
+      sourceScriptPath: parsed.scriptPath,
+      outputDir: config.outputDir,
+    });
+    input.stdout([
+      'Script drafts prepared:',
+      `Original: ${manifest.drafts.original.path}`,
+      `Polished: ${manifest.drafts.polished.path}`,
+      `Executable: ${manifest.drafts.executable.path}`,
+      `Manifest: ${manifest.manifestPath}`,
+    ].join('\n'));
+    return 0;
+  } catch (error) {
+    input.stderr(`Prepare script failed. Please check scripts/original.md.\n${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
 }
 
 async function runTtsSmoke(parsed: ParsedArgs, input: {
@@ -161,10 +236,24 @@ function formatFailure(report: RunReport): string {
   ].filter((part): part is string => part !== undefined && part.length > 0).join('\n');
 }
 
+function formatPreflightFailure(report: PreflightReport): string {
+  const failedCheck = report.checks.find((check) => check.status === 'failed');
+  return [
+    'Preflight failed.',
+    report.failedSegmentId === undefined ? undefined : `Segment: ${report.failedSegmentId}`,
+    report.failedAction === undefined ? undefined : `Action: ${report.failedAction.type}`,
+    failedCheck?.message,
+    failedCheck?.screenshotPath === undefined ? undefined : `Screenshot: ${failedCheck.screenshotPath}`,
+    report.preflightReportPath === undefined ? undefined : `Report: ${report.preflightReportPath}`,
+  ].filter((part): part is string => part !== undefined && part.length > 0).join('\n');
+}
+
 function usage(): string {
   return [
     'Usage:',
     '  npm run video:generate -- --script <script.md> [--output <output-dir>] [--storage-state <file>]',
+    '  npm run video:generate -- --script <script.md> --dry-run [--output <output-dir>] [--storage-state <file>]',
+    '  npm run video:generate -- --script <script.md> --prepare-script --output <output-dir>',
     '  npm run video:tts-smoke -- [text] [--output <output-dir>]',
   ].join('\n');
 }

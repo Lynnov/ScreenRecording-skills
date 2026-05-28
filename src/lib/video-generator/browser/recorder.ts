@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { calculateSegmentDurationMs } from '../duration.js';
 import { VideoGeneratorError, type Timeline, type TimelineSegment, type VideoGeneratorConfig } from '../types.js';
 import { executeBrowserAction } from './actions.js';
+import { installCursorOverlay } from './cursor-overlay.js';
 
 export interface RecordTimelineSegmentsInput {
   timeline: Timeline;
@@ -34,7 +35,9 @@ export async function recordTimelineSegments({
       storageState: config.storageStatePath,
       recordVideo: { dir: videoDir, size: config.viewport },
     });
+    const cursor = await installCursorOverlay(context);
     page = await context.newPage();
+    await cursor.ensure(page);
 
     const recordedSegments: TimelineSegment[] = [];
     let cursorMs = 0;
@@ -56,7 +59,7 @@ export async function recordTimelineSegments({
       const actionStartedAtMs = monotonicNowMs();
       for (const action of segment.actions) {
         currentAction = action;
-        page = await executeBrowserAction(page, action, config.actionTimeoutMs);
+        page = await executeBrowserAction(page, action, config.actionTimeoutMs, cursor);
         await waitForPageStable(page, config.actionTimeoutMs);
       }
       const actionDurationMs = monotonicNowMs() - actionStartedAtMs;

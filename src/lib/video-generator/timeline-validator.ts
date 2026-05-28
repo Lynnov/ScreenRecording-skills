@@ -94,12 +94,36 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
       }
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
+    case 'hover':
+      if (!hasTextOrSelector(action)) {
+        throw new VideoGeneratorError('INVALID_HOVER_TARGET', 'Hover action must include text or selector.', segmentId);
+      }
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
     case 'fill':
       if (typeof action.value !== 'string' || !action.value) {
         throw new VideoGeneratorError('INVALID_FILL_VALUE', 'Fill action must include a value.', segmentId);
       }
       if (!hasTextOrSelector(action)) {
         throw new VideoGeneratorError('INVALID_FILL_TARGET', 'Fill action must include text or selector.', segmentId);
+      }
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'remoteSelect':
+      if (!hasTextOrSelector(action)) {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action must include text or selector.', segmentId);
+      }
+      if (typeof action.query !== 'string' || !action.query.trim()) {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action must include a query.', segmentId);
+      }
+      if (!(action.selectFirst === true) && (typeof action.option !== 'string' || !action.option.trim())) {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action must include option or selectFirst.', segmentId);
+      }
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'selectFirst':
+      if (!hasTextOrSelector(action)) {
+        throw new VideoGeneratorError('INVALID_SELECT_FIRST_TARGET', 'Select first action must include text or selector.', segmentId);
       }
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
@@ -114,6 +138,15 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
       return;
     case 'scrollTo':
       validateSelectorWaitTarget(action.target, segmentId);
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'uploadFile':
+      if (!hasTextOrSelector(action)) {
+        throw new VideoGeneratorError('INVALID_UPLOAD_FILE_TARGET', 'Upload file action must include text or selector.', segmentId);
+      }
+      if (typeof action.path !== 'string' || !action.path.trim()) {
+        throw new VideoGeneratorError('INVALID_UPLOAD_FILE_TARGET', 'Upload file action must include a path.', segmentId);
+      }
       validateOptionalWaitFor(action.waitFor, segmentId);
       return;
     default:

@@ -78,6 +78,54 @@ test('parseVideoScript parses selector click and fill actions for ambiguous page
   ]);
 });
 
+test('parseVideoScript parses Phase 3 actions and preserves business query text', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：操作复杂表单
+悬停 原纸贸易
+悬停选择器 .menu-item
+远程选择 客户名称 测试 第一个
+远程选择 客户名称 测试 选择 张三公司
+选择 收货地址 第一个`, config);
+
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'hover', text: '原纸贸易' },
+    { type: 'hover', selector: '.menu-item' },
+    { type: 'remoteSelect', text: '客户名称', query: '测试', selectFirst: true },
+    { type: 'remoteSelect', text: '客户名称', query: '测试', option: '张三公司' },
+    { type: 'selectFirst', text: '收货地址' },
+  ]);
+});
+
+test('parseVideoScript parses quoted Phase 3 action targets', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：操作带空格字段
+远程选择 “客户 名称” “测试 公司” 选择 “张三 公司”
+选择 “收货 地址” 第一个
+上传文件选择器 "input[type=file]" "fixtures/contracts/demo contract.pdf"`, config);
+
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'remoteSelect', text: '客户 名称', query: '测试 公司', option: '张三 公司' },
+    { type: 'selectFirst', text: '收货 地址' },
+    { type: 'uploadFile', selector: 'input[type=file]', path: 'fixtures/contracts/demo contract.pdf' },
+  ]);
+});
+
+test('parseVideoScript parses upload file actions with quoted targets and paths', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：上传合同
+上传文件 合同附件 fixtures/contracts/demo.pdf
+
+旁白：上传带空格文件
+上传文件 “合同 附件” "fixtures/contracts/demo contract.pdf"`, config);
+
+  assert.deepEqual(timeline.segments[0]?.actions, [
+    { type: 'uploadFile', text: '合同附件', path: 'fixtures/contracts/demo.pdf' },
+  ]);
+  assert.deepEqual(timeline.segments[1]?.actions, [
+    { type: 'uploadFile', text: '合同 附件', path: 'fixtures/contracts/demo contract.pdf' },
+  ]);
+});
+
 test('parseVideoScript parses selector wait, hidden wait, and scroll-to-selector actions', () => {
   const config = loadVideoGeneratorConfig();
   const timeline = parseVideoScript(`旁白：找到目标卡片

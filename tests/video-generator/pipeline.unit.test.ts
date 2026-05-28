@@ -61,7 +61,14 @@ test('runVideoGenerator writes artifacts and success report with injected depend
       path.join(outputDir, 'audio', 'seg-001.wav'),
       path.join(outputDir, 'audio', 'seg-002.wav'),
     ]);
-    assert.equal(existsSync(path.join(outputDir, 'run-report.json')), true);
+    assert.equal(existsSync(path.join(outputDir, 'scripts')), true);
+    assert.equal(existsSync(path.join(outputDir, 'auth')), true);
+    assert.equal(existsSync(path.join(outputDir, 'clips')), true);
+    assert.equal(existsSync(path.join(outputDir, 'audio')), true);
+    assert.equal(existsSync(path.join(outputDir, 'screenshots')), true);
+    assert.equal(existsSync(path.join(outputDir, 'reports')), true);
+    assert.equal(existsSync(path.join(outputDir, 'debug')), true);
+    assert.equal(existsSync(path.join(outputDir, 'reports', 'run-report.json')), true);
 
     const timeline = JSON.parse(await readFile(path.join(outputDir, 'timeline.json'), 'utf8')) as Timeline;
     assert.equal(timeline.segments[0]?.actualAudioDurationMs, 1200);
@@ -168,6 +175,45 @@ test('runVideoGenerator passes timeline segment durations to audio merge', async
   }
 });
 
+test('runVideoGenerator redacts sensitive failed action fields in failure report', async () => {
+  const outputDir = path.join(tmpdir(), `pipeline-redacted-action-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const scriptPath = await makeScriptFile(outputDir);
+  const failedAction = { type: 'fill' as const, text: '密码', value: 'SuperSecret-123' };
+  const ttsProvider: TtsProvider = {
+    async synthesize(request) {
+      await writeFile(request.outputPath, `audio:${request.segmentId}`);
+      return { segmentId: request.segmentId, audioPath: request.outputPath, durationMs: 1000 };
+    },
+  };
+
+  try {
+    const report = await runVideoGenerator({
+      scriptPath,
+      configOverrides: { outputDir },
+      deps: {
+        ttsProvider,
+        recordTimelineSegments: async () => {
+          const error = new Error('fill target not found');
+          Object.assign(error, { segmentId: 'seg-002', failedAction });
+          throw error;
+        },
+        renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
+      },
+    });
+
+    const reportText = await readFile(path.join(outputDir, 'reports', 'run-report.json'), 'utf8');
+    const written = JSON.parse(reportText) as typeof report;
+
+    assert.equal(report.ok, false);
+    assert.deepEqual(report.failedAction, { type: 'fill', text: '密码', value: '[redacted]' });
+    assert.deepEqual(written.failedAction, { type: 'fill', text: '密码', value: '[redacted]' });
+    assert.equal(reportText.includes('SuperSecret-123'), false);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('runVideoGenerator writes failed action into failure report', async () => {
   const outputDir = path.join(tmpdir(), `pipeline-failed-action-${process.pid}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
@@ -198,7 +244,7 @@ test('runVideoGenerator writes failed action into failure report', async () => {
     assert.equal(report.ok, false);
     assert.deepEqual(report.failedAction, failedAction);
 
-    const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
+    const written = JSON.parse(await readFile(path.join(outputDir, 'reports', 'run-report.json'), 'utf8')) as typeof report;
     assert.deepEqual(written.failedAction, failedAction);
   } finally {
     await rm(outputDir, { recursive: true, force: true });
@@ -240,7 +286,7 @@ test('runVideoGenerator returns failure report and skips recording when TTS fail
     assert.equal(recordCalls, 0);
     assert.equal(renderCalls, 0);
 
-    const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
+    const written = JSON.parse(await readFile(path.join(outputDir, 'reports', 'run-report.json'), 'utf8')) as typeof report;
     assert.equal(written.ok, false);
     assert.equal(written.failedSegmentId, 'seg-001');
     assert.match(written.errorMessage ?? '', /TTS failed for seg-001: quota exceeded/);
@@ -281,7 +327,7 @@ test('runVideoGenerator writes failure report with failed segment and screenshot
     assert.equal(report.screenshotPath, screenshotPath);
     assert.match(report.errorMessage ?? '', /missing button/);
 
-    const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
+    const written = JSON.parse(await readFile(path.join(outputDir, 'reports', 'run-report.json'), 'utf8')) as typeof report;
     assert.equal(written.ok, false);
     assert.equal(written.failedSegmentId, 'seg-002');
     assert.equal(written.screenshotPath, screenshotPath);
