@@ -1,10 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
 import { executeBrowserAction, waitForTarget } from '../../src/lib/video-generator/browser/actions.js';
 import { basicDemoDataUrl } from '../../src/lib/video-generator/browser/demo-page.js';
+import type { CursorOverlayController } from '../../src/lib/video-generator/browser/cursor-overlay.js';
 import { VideoGeneratorError } from '../../src/lib/video-generator/types.js';
+
+function recordingCursor(events: string[]): CursorOverlayController {
+  return {
+    async ensure() {
+      events.push('ensure');
+    },
+    async moveToLocator(locator: Locator) {
+      const text = await locator.textContent().catch(() => undefined);
+      events.push(`move:${text?.trim() || 'locator'}`);
+    },
+    async moveToPoint(_page: Page, point: { x: number; y: number }) {
+      events.push(`move-point:${point.x},${point.y}`);
+    },
+    async click() {
+      events.push('click');
+    },
+  };
+}
 
 async function withPage(run: (page: Page) => Promise<void>): Promise<void> {
   let browser: Browser | undefined;
@@ -69,13 +88,15 @@ test('executeBrowserAction clicks exact text and waits for text', async () => {
         });
       </script>
     `);
+    const events: string[] = [];
 
     await executeBrowserAction(page, {
       type: 'click',
       text: 'Reveal',
       waitFor: { type: 'text', value: 'Revealed message' },
-    }, 1000);
+    }, 1000, recordingCursor(events));
 
+    assert.deepEqual(events, ['move:Reveal', 'click']);
     assert.equal(await page.getByText('Revealed message').count(), 1);
   });
 });
@@ -205,9 +226,12 @@ test('executeBrowserAction fills selector and text targets', async () => {
       <input id="email" placeholder="Email address" />
     `);
 
-    await executeBrowserAction(page, { type: 'fill', selector: '#name', value: 'Ada' }, 1000);
-    await executeBrowserAction(page, { type: 'fill', text: 'Email address', value: 'ada@example.com' }, 1000);
+    const events: string[] = [];
 
+    await executeBrowserAction(page, { type: 'fill', selector: '#name', value: 'Ada' }, 1000, recordingCursor(events));
+    await executeBrowserAction(page, { type: 'fill', text: 'Email address', value: 'ada@example.com' }, 1000, recordingCursor(events));
+
+    assert.deepEqual(events, ['move:locator', 'click', 'move:locator', 'click']);
     assert.equal(await page.locator('#name').inputValue(), 'Ada');
     assert.equal(await page.locator('#email').inputValue(), 'ada@example.com');
   });

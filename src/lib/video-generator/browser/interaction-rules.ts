@@ -1,5 +1,6 @@
 import type { Locator, Page } from 'playwright';
 import { VideoGeneratorError } from '../types.js';
+import type { CursorOverlayController } from './cursor-overlay.js';
 import type { PageSnapshotCandidate } from './page-snapshot.js';
 
 type TargetCandidate = string | PageSnapshotCandidate;
@@ -14,9 +15,11 @@ const FIELD_SELECTOR = [
   '[role="textbox"]',
 ].join(',');
 
-export async function clickCandidate(page: Page, candidate: PageSnapshotCandidate, timeoutMs: number): Promise<void> {
+export async function clickCandidate(page: Page, candidate: PageSnapshotCandidate, timeoutMs: number, cursor?: CursorOverlayController): Promise<void> {
   try {
     const locator = await resolveCandidateLocator(page, candidate, timeoutMs);
+    await cursor?.moveToLocator(locator, timeoutMs);
+    await cursor?.click(page);
     await clickClickableTarget(locator, timeoutMs);
   } catch (error) {
     if (error instanceof VideoGeneratorError) {
@@ -30,11 +33,13 @@ export async function clickCandidate(page: Page, candidate: PageSnapshotCandidat
   }
 }
 
-export async function fillFieldByName(page: Page, target: TargetCandidate, value: string, timeoutMs: number): Promise<void> {
+export async function fillFieldByName(page: Page, target: TargetCandidate, value: string, timeoutMs: number, cursor?: CursorOverlayController): Promise<void> {
   const fieldName = typeof target === 'string' ? target : target.name;
 
   try {
     const locator = await resolveFieldLocator(page, target, timeoutMs);
+    await cursor?.moveToLocator(locator, timeoutMs);
+    await cursor?.click(page);
     await fillLocator(locator, value, timeoutMs);
   } catch (error) {
     if (error instanceof VideoGeneratorError) {
@@ -48,11 +53,13 @@ export async function fillFieldByName(page: Page, target: TargetCandidate, value
   }
 }
 
-export async function selectOptionByFieldName(page: Page, target: TargetCandidate, optionName: string, timeoutMs: number): Promise<void> {
+export async function selectOptionByFieldName(page: Page, target: TargetCandidate, optionName: string, timeoutMs: number, cursor?: CursorOverlayController): Promise<void> {
   const fieldName = typeof target === 'string' ? target : target.name;
 
   try {
     const entry = await resolveSelectEntryLocator(page, target, timeoutMs);
+    await cursor?.moveToLocator(entry, timeoutMs);
+    await cursor?.click(page);
     if (await isNativeSelect(entry, timeoutMs)) {
       await entry.selectOption({ label: optionName }, { timeout: timeoutMs });
       return;
@@ -64,6 +71,8 @@ export async function selectOptionByFieldName(page: Page, target: TargetCandidat
     const optionScope = await resolveOpenedOptionScope(page, entry, target, timeoutMs);
     const option = scopedOptionLocator(optionScope)
       .filter({ hasText: optionName });
+    await cursor?.moveToLocator(option, timeoutMs);
+    await cursor?.click(page);
     await clickClickableTarget(option, timeoutMs);
   } catch (error) {
     if (error instanceof VideoGeneratorError) {

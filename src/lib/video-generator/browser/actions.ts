@@ -1,10 +1,16 @@
 import type { Locator, Page } from 'playwright';
 import { VideoGeneratorError, type ActionCandidateReport, type BrowserAction, type WaitTarget } from '../types.js';
 import { matchSemanticAction } from './candidate-matcher.js';
+import { createNoopCursorOverlayController, type CursorOverlayController } from './cursor-overlay.js';
 import { clickCandidate, fillFieldByName, selectOptionByFieldName, waitAfterSemanticAction } from './interaction-rules.js';
 import { capturePageSnapshot, type PageSnapshot } from './page-snapshot.js';
 
-export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<Page> {
+export async function executeBrowserAction(
+  page: Page,
+  action: BrowserAction,
+  timeoutMs: number,
+  cursor: CursorOverlayController = createNoopCursorOverlayController(),
+): Promise<Page> {
   try {
     switch (action.type) {
       case 'goto':
@@ -27,6 +33,8 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
 
         const target = await resolveClickLocator(locator, timeoutMs);
         const samePageHref = await targetBlankHref(target);
+        await cursor.moveToLocator(target, timeoutMs);
+        await cursor.click(page);
         if (samePageHref !== undefined) {
           await page.goto(samePageHref, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
         } else {
@@ -38,9 +46,9 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
       }
       case 'fill':
         if (action.selector !== undefined) {
-          await fillLocator(page.locator(action.selector), action.value, timeoutMs);
+          await fillLocator(page.locator(action.selector), action.value, timeoutMs, cursor);
         } else if (action.text !== undefined) {
-          await fillByText(page, action.text, action.value, timeoutMs);
+          await fillByText(page, action.text, action.value, timeoutMs, cursor);
         } else {
           throw new VideoGeneratorError('INVALID_FILL_TARGET', 'fill action requires text or selector.');
         }
@@ -49,16 +57,21 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
       case 'waitFor':
         await waitForTarget(page, action.target, timeoutMs);
         return page;
-      case 'scroll':
-        await page.mouse.move((page.viewportSize()?.width ?? 0) / 2, (page.viewportSize()?.height ?? 0) / 2);
+      case 'scroll': {
+        const center = { x: (page.viewportSize()?.width ?? 0) / 2, y: (page.viewportSize()?.height ?? 0) / 2 };
+        await cursor.moveToPoint(page, center);
         await page.mouse.wheel(0, action.y);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
-      case 'scrollTo':
-        await page.locator(action.target.value).scrollIntoViewIfNeeded({ timeout: timeoutMs });
+      }
+      case 'scrollTo': {
+        const target = page.locator(action.target.value);
+        await target.scrollIntoViewIfNeeded({ timeout: timeoutMs });
+        await cursor.moveToLocator(target, timeoutMs);
         await waitForTarget(page, action.target, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
+      }
       case 'semanticClick': {
         const snapshot = await capturePageSnapshot(page);
         const match = matchSemanticAction(action, snapshot);
@@ -70,7 +83,7 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           });
         }
 
-        await clickCandidate(page, match.candidate, timeoutMs);
+        await clickCandidate(page, match.candidate, timeoutMs, cursor);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         await waitAfterSemanticAction(page, timeoutMs);
         return page;
@@ -86,7 +99,7 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           });
         }
 
-        await fillFieldByName(page, match.candidate, action.value, timeoutMs);
+        await fillFieldByName(page, match.candidate, action.value, timeoutMs, cursor);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         await waitAfterSemanticAction(page, timeoutMs);
         return page;
@@ -102,7 +115,7 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
           });
         }
 
-        await selectOptionByFieldName(page, match.candidate, action.option, timeoutMs);
+        await selectOptionByFieldName(page, match.candidate, action.option, timeoutMs, cursor);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         await waitAfterSemanticAction(page, timeoutMs);
         return page;
@@ -212,23 +225,23 @@ async function waitForAllLocatorsHidden(locator: Locator, timeoutMs: number): Pr
   throw new Error(`Timed out waiting for all matching locators to be hidden.`);
 }
 
-async function fillByText(page: Page, text: string, value: string, timeoutMs: number): Promise<void> {
+async function fillByText(page: Page, text: string, value: string, timeoutMs: number, cursor: CursorOverlayController): Promise<void> {
   const label = page.getByLabel(text);
   const labelCount = await label.count();
 
   if (labelCount > 0) {
     try {
-      await fillLocator(label, value, timeoutMs);
+      await fillLocator(label, value, timeoutMs, cursor);
       return;
     } catch (error) {
       throw new Error(`Failed to fill label ${text}: ${errorMessage(error)}`);
     }
   }
 
-  await fillLocator(page.getByPlaceholder(text), value, timeoutMs);
+  await fillLocator(page.getByPlaceholder(text), value, timeoutMs, cursor);
 }
 
-async function fillLocator(locator: Locator, value: string, timeoutMs: number): Promise<void> {
+async function fillLocator(locator: Locator, value: string, timeoutMs: number, cursor: CursorOverlayController): Promise<void> {
   const target = await resolveActionLocator(locator, timeoutMs);
   const isEditable = await target.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
     || element.isContentEditable, undefined, { timeout: timeoutMs });
@@ -236,6 +249,8 @@ async function fillLocator(locator: Locator, value: string, timeoutMs: number): 
     throw new Error('Target is not editable.');
   }
 
+  await cursor.moveToLocator(target, timeoutMs);
+  await cursor.click(target.page());
   await target.click({ timeout: timeoutMs });
   await target.page().keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
   await target.page().keyboard.type(value);

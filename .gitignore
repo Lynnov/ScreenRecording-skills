@@ -6,6 +6,10 @@ build/
 release/
 coverage/
 
+
+# 环境变量和密钥
+*.key
+*.pem
 .env
 .env.*
 !.env.example

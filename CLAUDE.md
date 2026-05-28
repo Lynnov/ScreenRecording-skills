@@ -1,154 +1,121 @@
 # CLAUDE.md
 
-CodePilot — 多模型 AI Agent 桌面客户端，基于 Electron + Next.js。
+脚本驱动网页教程视频生成器 — 基于 TypeScript + Playwright + 阿里云 TTS + ffmpeg 的本地 CLI 工具。
 
-> 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含规则和流程。
+> 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含协作规则和项目流程。
+
+## 项目定位
+
+本项目将 Markdown 脚本转换为网页演示视频：脚本描述“打开页面、点击按钮、填写字段、选择选项、等待结果”等操作，系统自动执行浏览器动作、生成旁白音频和字幕，最后输出 `final.mp4`。
+
+当前重点是 CLI 核心能力，不是桌面 UI：
+
+- CLI 入口：`src/cli/video-generator.ts`
+- 核心流水线：`src/lib/video-generator/`
+- 示例脚本：`examples/video-generator/`
+- 输出目录：默认 `video-runs/`
 
 ## 开发规则
 
 **提交前必须详尽测试：**
-- 每次提交代码前，必须在开发环境中充分测试所有改动的功能，确认无回归
-- 涉及前端 UI 的改动需要实际启动应用验证（`npm run dev` 或 `npm run electron:dev`）
-- 涉及构建/打包的改动需要完整执行一次打包流程验证产物可用
-- 涉及多平台的改动需要考虑各平台的差异性
 
-**UI 改动必须用 CDP 验证（chrome-devtools MCP）：**
-- 修改组件、样式、布局后，必须通过 chrome-devtools MCP 实际验证效果
-- 验证流程：`npm run dev` 启动应用 → 用 CDP 打开 `http://localhost:3000` 对应页面 → 截图确认渲染正确 → 检查 console 无报错
-- 涉及交互的改动（按钮、表单、导航）需通过 CDP 模拟点击/输入并截图验证
-- 修改响应式布局时，用 CDP 的 device emulation 分别验证桌面和移动端视口
+- 修改代码后至少运行 `npm run test`，确认 typecheck 和单元测试通过。
+- 涉及真实视频生成、TTS、ffmpeg 或 Playwright 录制路径时，优先用内置 demo 脚本做一次端到端验证。
+- 涉及阿里云 TTS 的真实验证需要确认本机有 `DASHSCOPE_API_KEY`，没有凭据时只能验证失败报告和单元测试。
+- 涉及 ffmpeg/ffprobe 的改动，需要确认本机命令可用或明确记录无法验证的原因。
+- 涉及跨平台路径、shell 参数、ffmpeg filtergraph 时，要考虑 Windows 路径和空格转义。
 
 **新增功能前必须详尽调研：**
-- 新增功能前必须充分调研相关技术方案、API 兼容性、社区最佳实践
-- 涉及 Electron API 需确认目标版本支持情况
-- 涉及第三方库需确认与现有依赖的兼容性
-- 涉及 Claude Code SDK 需确认 SDK 实际支持的功能和调用方式
-- 对不确定的技术点先做 POC 验证，不要直接在主代码中试错
+
+- 涉及 Playwright API、浏览器录制、storage state、locator 策略时，先确认当前 Playwright 版本支持情况。
+- 涉及 ffmpeg 参数、字幕滤镜、音频合并时，先用最小命令或单元测试验证参数。
+- 涉及 TTS provider 时，避免把凭据写入脚本、报告或测试快照。
+- 对不确定的网页交互模式，先用本地 HTML fixture 或内置 demo 做 POC，不要直接在真实业务网页上试错。
 
 **Worktree 隔离规则：**
-- 如果任务设置了 Worktree，所有代码改动只能在该 Worktree 内进行
-- 严格禁止跨 Worktree 提交（不得在主目录提交 Worktree 的改动，反之亦然）
-- 严格禁止 `git push`，除非用户主动提出
-- 启动测试服务（`npm run dev` 等）只从当前 Worktree 启动，不得在其他目录启动
-- 合并回主分支必须由用户主动发起，不得自动合并
-- **端口隔离**：Worktree 启动 dev server 时使用非默认端口（如 `PORT=3001`），避免与主目录冲突
-- **禁止跨目录编辑**：属于 Worktree 任务范围的文件，只在该 Worktree 内编辑，不得在主目录修改
-- **合并前检查 untracked 文件**：合并回主分支前先 `git status` 确认无调试残留、临时文件等
+
+- 如果任务设置了 Worktree，所有代码改动只能在该 Worktree 内进行。
+- 严格禁止跨 Worktree 提交，不得在主目录提交 Worktree 的改动，反之亦然。
+- 严格禁止 `git push`，除非用户主动提出。
+- 启动测试或生成命令只从当前 Worktree 启动，不得跨目录运行。
+- 合并回主分支必须由用户主动发起，不得自动合并。
+- 合并前先 `git status` 确认无调试残留、临时文件或生成产物。
 
 **Commit 信息规范：**
-- 标题行使用 conventional commits 格式（feat/fix/refactor/chore 等）
-- body 中按文件或功能分组，说明改了什么、为什么改、影响范围
-- 修复 bug 需说明根因；架构决策需简要说明理由
+
+- 标题行使用 conventional commits 格式，例如 `feat:`、`fix:`、`test:`、`docs:`、`chore:`。
+- body 按功能或文件分组说明改了什么、为什么改、影响范围。
+- 修复 bug 需说明根因；架构决策需简要说明理由。
 
 ## 自检命令
 
-**自检命令（pre-commit hook 会自动执行前三项）：**
-- `npm run test` — typecheck + 单元测试（~4s，无需 dev server）
-- `npm run test:smoke` — 冒烟测试（~15s，需要 dev server）
-- `npm run test:e2e` — 完整 E2E（~60s+，需要 dev server）
-
-修改代码后，commit 前至少确保 `npm run test` 通过。
-涉及 UI 改动时额外运行 `npm run test:smoke`。
+- `npm run typecheck` — TypeScript 类型检查。
+- `npm run test:unit` — 运行所有单元测试。
+- `npm run test` — typecheck + 单元测试。
+- `npm run video:generate -- --script examples/video-generator/basic-demo.md --output video-runs/basic-demo` — 用基础内置 demo 生成视频。
+- `npm run video:generate -- --script examples/video-generator/semantic-demo.md --output video-runs/semantic-demo` — 用语义动作 demo 生成视频。
+- `npm run video:tts-smoke -- "你好，这是一次语音合成测试"` — 真实 TTS smoke，需要 `DASHSCOPE_API_KEY`。
 
 ## 改动自查
 
 完成代码修改后，在提交前确认：
-1. 改动是否涉及 i18n — 是否需要同步 `src/i18n/en.ts` 和 `zh.ts`
-2. 改动是否涉及数据库 — 是否需要在 `src/lib/db.ts` 更新 schema 迁移
-3. 改动是否涉及类型 — 是否需要更新 `src/types/index.ts`
-4. 改动是否涉及已有文档 — 是否需要更新 `docs/handover/` 中的交接文档
-5. 改动是否构成新功能或大迭代 — 是否需要写文档（见下方"功能文档"）
+
+1. 改动是否涉及脚本语法 — 是否需要更新 `examples/video-generator/README.md` 和示例脚本。
+2. 改动是否涉及动作类型 — 是否需要更新 `src/lib/video-generator/types.ts`、`timeline-validator.ts` 和相关单测。
+3. 改动是否涉及浏览器动作 — 是否需要补 `tests/video-generator/browser-actions.unit.test.ts` 或 `browser-recorder.unit.test.ts`。
+4. 改动是否涉及失败报告 — 是否需要同步 `RunReport`、`report.ts`、`pipeline.ts` 和报告测试。
+5. 改动是否涉及输出素材结构 — 是否需要更新 `docs/handover/` 和 `examples/video-generator/README.md`。
+6. 改动是否构成新功能或大迭代 — 是否需要写或更新执行计划、交接文档、产品思考文档。
 
 ## 功能文档
 
 **新功能或大迭代完成后必须同时输出两份文档：**
 
 1. **技术交接文档** — 放 `docs/handover/`
-   - 目录结构、数据流、DB schema、API 路由、关键设计决策
-   - 涉及 MCP 工具的需列出工具名、参数、自动批准策略
-   - 目标读者：接手的开发者，需要能仅靠文档理解模块全貌
+   - 目录结构、数据流、核心类型、脚本语法、录制流程、输出素材、关键设计决策。
+   - 涉及 Playwright、TTS、ffmpeg 或候选匹配策略时，需列出边界和失败模式。
+   - 目标读者：接手的开发者，需要能仅靠文档理解模块全貌。
 2. **产品思考文档** — 放 `docs/insights/`
-   - 功能解决了什么用户问题、为什么这样设计而不是其他方案
-   - 用户反馈驱动的决策、参考的外部文章/竞品/趋势
-   - 未来可能的方向和已知的局限性
-   - 目标读者：产品决策者，需要能理解设计背后的"为什么"
+   - 功能解决了什么用户问题、为什么这样设计而不是其他方案。
+   - 用户脚本体验、失败可诊断性、适用场景和已知局限。
+   - 目标读者：产品决策者，需要能理解设计背后的“为什么”。
 
 **两份文档必须互相反向链接：**
+
 - 交接文档开头：`> 产品思考见 [docs/insights/xxx.md](../insights/xxx.md)`
 - 产品文档开头：`> 技术实现见 [docs/handover/xxx.md](../handover/xxx.md)`
 
-**文件命名保持一致**（如 `cli-tools.md`），方便对照查找。
+**文件命名保持一致**，方便对照查找。
 
-## 发版
+## 发版与对外分发
 
-**发版流程：** 更新 `RELEASE_NOTES.md` → 更新 package.json version → `npm install` 同步 lock → 提交推送 → `git tag v{版本号} && git push origin v{版本号}` → CI 自动构建发布并使用 `RELEASE_NOTES.md` 作为 Release 正文。不要手动创建 GitHub Release（CI 会自动创建并上传构建产物）。
+当前项目是本地 CLI 工具，不走桌面应用安装包或自动发布流程。对外给人试用时，优先提供：
 
-**发版纪律：** 禁止自动发版。`git push` + `git tag` 必须等用户明确指示后才执行。commit 可以正常进行。
+1. 项目源码或压缩包。
+2. `README` / 快速开始说明。
+3. `.env.example` 或环境变量说明。
+4. `examples/video-generator/basic-demo.md` 和 `semantic-demo.md`。
+5. 必要依赖：Node.js、Playwright Chromium、ffmpeg/ffprobe、DashScope API Key。
 
-**构建：** macOS 产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包。`scripts/after-pack.js` 重编译 better-sqlite3 为 Electron ABI。构建前清理 `rm -rf release/ .next/`。
-
-**Release Notes 格式（必须严格遵循）：**
-
-标题：`CodePilot v{版本号}`
-
-正文结构：
-
-```markdown
-## CodePilot v{版本号}
-
-> 一句话版本摘要，说明这个版本的核心主题或推荐升级理由。
-
-### 新增功能
-- 功能描述（面向用户的语言，不要写 commit hash）
-
-### 修复问题
-- 修复了 xxx 的问题
-
-### 优化改进
-- 优化了 xxx
-
-## 下载地址
-
-### macOS
-- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-arm64.dmg)
-- [Intel](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-x64.dmg)
-
-### Windows
-- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot.Setup.{版本号}.exe)
-
-## 安装说明
-
-**macOS**: 下载 DMG → 拖入 Applications → 首次启动如遇安全提示，在系统设置 > 隐私与安全中点击"仍要打开"
-**Windows**: 下载 exe 安装包 → 双击安装
-
-## 系统要求
-
-- macOS 12.0+ / Windows 10+ / Linux (glibc 2.31+)
-- 需要配置 API 服务商（Anthropic / OpenRouter 等）
-- 推荐安装 Claude Code CLI 以获得完整功能
-```
-
-**Release Notes 写作规则：**
-- 更新内容必须用用户能理解的语言，不要出现 commit hash、函数名、文件路径
-- 每个条目说清楚"用户能感知到什么变化"
-- 下载链接必须是完整的 GitHub release download URL，用户点击即可下载
-- 如果某个分类没有内容（如没有修复），跳过该分类不要留空标题
-- `git log --oneline` 的输出只用于自己梳理，不要原样复制到 Release Notes
+禁止自动发布 npm 包、自动推送远程仓库或自动创建 Release，除非用户明确要求。
 
 ## 执行计划
 
-**中大型功能（跨 3+ 模块、涉及 schema 变更、需分阶段交付）必须先写执行计划再开工。**
-- 活跃计划放 `docs/exec-plans/active/`，完成后移至 `completed/`
-- 纯调研/可行性分析放 `docs/research/`
-- 发现技术债务时记录到 `docs/exec-plans/tech-debt-tracker.md`
-- 模板和规范见 `docs/exec-plans/README.md`
+**中大型功能（跨 3+ 模块、涉及输出格式变更、需分阶段交付）必须先写执行计划再开工。**
+
+- 活跃计划放 `docs/exec-plans/active/`，完成后移至 `completed/`。
+- 纯调研和 POC 记录放 `docs/research/`。
+- 发现技术债务时记录到 `docs/exec-plans/tech-debt-tracker.md`。
+- 模板和规范见 `docs/exec-plans/README.md`。
 
 ## 文档
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — 项目架构、目录结构、数据流、新功能触及点
-- `docs/exec-plans/` — 执行计划（进度状态 + 决策日志 + 技术债务）
-- `docs/handover/` — 技术交接文档（架构、数据流、设计决策）
-- `docs/insights/` — 产品思考文档（用户问题、设计理由、趋势洞察）
-- `docs/research/` — 调研文档（技术方案、可行性分析）
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — 项目架构、目录结构、数据流、关键模块。
+- `examples/video-generator/` — 用户可复制的脚本示例。
+- `docs/research/` — 技术调研、POC、复盘。
+- `docs/exec-plans/` — 执行计划和阶段进度。
+- `docs/handover/` — 技术交接文档。
+- `docs/insights/` — 产品思考文档。
+- `docs/future/` — 暂未排期的方向和想法。
 
 **检索前先读对应目录的 README.md；增删文件后更新索引。**

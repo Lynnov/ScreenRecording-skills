@@ -1,182 +1,174 @@
 # ARCHITECTURE.md
 
-CodePilot 是多模型 AI Agent 桌面客户端。Electron 40 做外壳，Next.js 16 (App Router) 做前端和 API 层，better-sqlite3 做本地持久化，通过 Claude Agent SDK 与 AI 服务商交互。
+脚本驱动网页教程视频生成器是一个本地 CLI 工具。它用 TypeScript 组织流水线，用 Playwright 控制并录制 Chromium 页面，用阿里云 DashScope CosyVoice 生成旁白音频，用 ffmpeg/ffprobe 合成音频、字幕和最终视频。
 
 ## 目录结构
 
 ```
 src/
-├── app/            # Next.js App Router — 页面 + API 路由
-│   ├── api/        #   52 个 REST 端点（chat, media, files, plugins, settings …）
-│   ├── chat/       #   聊天页（主界面）
-│   ├── plugins/    #   插件 / MCP 管理
-│   ├── settings/   #   应用设置
-│   ├── bridge/     #   IM Bridge 设置
-│   ├── gallery/    #   图片画廊
-│   └── …
-├── components/     # React 组件（按功能分目录）
-│   ├── ui/         #   Radix 基础组件 (Button, Dialog, Tabs …)
-│   ├── chat/       #   聊天界面 (MessageList, CodeBlock, ImageThumbnail …)
-│   ├── ai-elements/#   AI 响应渲染 (artifact, reasoning, tool, task …)
-│   ├── layout/     #   布局 (AppShell, Header, NavRail, ChatListPanel …)
-│   ├── plugins/    #   插件管理 UI
-│   ├── settings/   #   设置面板
-│   ├── bridge/     #   Bridge 设置 UI
-│   ├── skills/     #   技能市场
-│   ├── project/    #   项目文件树
-│   └── gallery/    #   画廊视图
-├── lib/            # 核心业务逻辑
-│   ├── db.ts               # SQLite 数据库（schema 定义 + CRUD）
-│   ├── claude-client.ts    # Claude Agent SDK 封装、消息流
-│   ├── stream-session-manager.ts  # SSE 流生命周期管理
-│   ├── conversation-registry.ts   # 活跃 SDK 会话全局注册
-│   ├── image-generator.ts  # Gemini/Anthropic 图片生成
-│   ├── job-executor.ts     # 批量图片生成任务执行器
-│   ├── files.ts            # 文件系统浏览和预览
-│   ├── claude-session-parser.ts   # 解析 Claude CLI .jsonl 会话
-│   ├── platform.ts         # 平台检测 (macOS/Windows/Linux)
-│   ├── error-classifier.ts # 错误分类（16 类结构化错误）
-│   ├── provider-doctor.ts  # Provider 诊断引擎（5 探针 + 修复动作）
-│   ├── runtime-log.ts      # console 环形缓冲（200 条，自动脱敏）
-│   └── bridge/             # IM Bridge 子系统（见下方）
-├── hooks/          # React Hooks (useSSEStream, useImageGen, useTranslation …)
-├── types/          # TypeScript 类型
-│   ├── index.ts            # 所有业务类型 (ChatSession, Message, MCPServerConfig …)
-│   └── electron.d.ts       # Electron contextBridge API 类型
-└── i18n/           # 国际化
-    ├── en.ts               # 英文
-    └── zh.ts               # 中文
+├── cli/
+│   └── video-generator.ts        # CLI 入口：参数解析、TTS smoke、退出码和报告展示
+└── lib/
+    └── video-generator/
+        ├── types.ts              # Timeline、BrowserAction、RunReport、错误类型
+        ├── config.ts             # 默认配置、环境变量和 CLI override 合并
+        ├── script-parser.ts      # Markdown/自然语言脚本 → Timeline
+        ├── timeline-validator.ts # Timeline 结构、动作、等待目标和时长校验
+        ├── pipeline.ts           # 主流水线：解析、TTS、录制、字幕、音频、视频、报告
+        ├── duration.ts           # 片段时长计算
+        ├── subtitles.ts          # SRT 字幕生成
+        ├── audio.ts              # ffprobe 读取音频时长、ffmpeg 合并旁白音轨
+        ├── ffmpeg.ts             # final.mp4 渲染、字幕烧录、连续 clip 裁切/合成
+        ├── report.ts             # run-report.json 和 candidate-report.json 写入
+        ├── tts/
+        │   ├── types.ts          # TTS Provider 接口
+        │   └── aliyun.ts         # DashScope CosyVoice 非实时 HTTP TTS
+        └── browser/
+            ├── recorder.ts       # Playwright 连续录制和失败截图
+            ├── actions.ts        # goto/click/fill/wait/scroll/semantic 动作执行
+            ├── demo-page.ts      # 内置 demo 页面
+            ├── page-snapshot.ts  # 页面候选元素抽取
+            ├── candidate-matcher.ts # 语义目标匹配和候选报告
+            └── interaction-rules.ts # 常见 Web 交互规则
 
-electron/
-├── main.ts         # Electron 主进程（窗口、IPC、Utility Process）
-└── preload.ts      # contextBridge 暴露（install API, updater API）
+tests/
+└── video-generator/              # node:test + tsx 单元测试和 Playwright POC
+
+examples/
+└── video-generator/              # 可复制脚本示例和脚本写作说明
+
+docs/
+├── research/                     # 技术调研、POC、复盘
+├── exec-plans/                   # 活跃/完成执行计划
+├── handover/                     # 技术交接文档
+├── insights/                     # 产品思考文档
+└── future/                       # 暂未排期想法
 ```
 
 ## 数据流
 
 ```
-用户输入 → MessageInput 组件
-         → POST /api/chat/messages
-         → claude-client.ts（创建 SDK conversation）
-         → Claude Agent SDK SSE 流
-         → stream-session-manager.ts 管理流
-         → useSSEStream hook 订阅
-         → MessageList 渲染
-         → db.ts 持久化到 SQLite
+Markdown 脚本
+  → parseVideoScript
+  → Timeline + timeline-validator
+  → TTS provider 逐段生成 audio/{segmentId}.wav
+  → recordTimelineSegments 用 Playwright 顺序执行动作并连续录制 Chromium
+  → timeline.json + subtitles.srt
+  → mergeAudioSegments 生成 audio/narration.wav
+  → renderFinalVideo 调用 ffmpeg 输出 final.mp4
+  → writeRunReport 写入 run-report.json / candidate-report.json
 ```
 
-**Bridge 数据流（远程 IM 控制）：**
+**失败诊断数据流：**
 ```
-Telegram/Feishu 消息
-  → Adapter 长轮询/WebSocket 接收
-  → channelRouter 路由到 CodePilot session
-  → conversationEngine 调用 SDK
-  → SDK SSE 响应
-  → deliveryLayer 格式化 + 分片
-  → Adapter 发送回 IM
+Playwright/TTS/ffmpeg 错误
+  → VideoGeneratorError 标准化错误码和 segment id
+  → recorder 捕获 screenshots/{segmentId}.png
+  → semantic matcher 输出候选元素和失败 reason
+  → pipeline 汇总 RunReport
+  → CLI 打印失败摘要并返回非零退出码
 ```
 
-## 数据库（SQLite）
+## Timeline 模型
 
-Schema 定义在 `src/lib/db.ts`，12 张表：
+核心类型定义在 `src/lib/video-generator/types.ts`：
 
-| 表 | 用途 |
+| 类型 | 用途 |
 |----|------|
-| `chat_sessions` | 聊天会话元数据 |
-| `messages` | 消息（content 为 JSON 数组） |
-| `settings` | 键值设置 |
-| `tasks` | SDK TodoWrite 任务项 |
-| `api_providers` | API 提供商配置（Anthropic, OpenAI …） |
-| `media_generations` | 生成的图片/媒体 |
-| `media_tags` | 媒体标签 |
-| `media_jobs` | 批量图片生成任务 |
-| `media_job_items` | 批量任务中的单个项 |
-| `media_context_events` | 批量任务上下文同步 |
-| `channel_bindings` | Bridge: IM 频道 → CodePilot 会话绑定 |
-| `channel_offsets` | Bridge: 轮询偏移量水位线 |
+| `Timeline` | 一条视频脚本的标准结构，包含标题、顶层素材和 segments |
+| `TimelineSegment` | 单段旁白、字幕、动作、时长和素材引用 |
+| `BrowserAction` | 浏览器动作联合类型：打开、点击、填写、等待、滚动、语义点击、语义填写、语义选择 |
+| `WaitTarget` | 等待目标：文本、选择器、隐藏选择器、URL、network idle |
+| `SemanticActionTarget` | 语义动作目标：按钮、链接、字段、可见文本 |
+| `TimelineSegmentAssets` | 单段素材：音频、clip、截图、视频起止时间、已解析动作 |
+| `TimelineAssets` | 顶层素材：连续录制 clip 和起始偏移 |
+| `VideoGeneratorConfig` | viewport、时长估算、timeout、TTS、字幕模式、输出目录、storage state |
+| `RunReport` | 成功/失败报告，包含 final video、timeline、字幕、失败动作、候选和截图 |
+| `VideoGeneratorError` | 带错误码、segment id、失败动作和候选报告的结构化错误 |
 
-启用 WAL 模式 + 外键约束。数据目录：`~/.codepilot/`。
+## 浏览器录制子系统
 
-## Bridge 子系统
-
-`src/lib/bridge/` — 将外部 IM（Telegram、飞书）连接到 CodePilot 会话。
+`src/lib/video-generator/browser/` 负责把 timeline action 转为真实页面操作，并输出可供 ffmpeg 使用的视频素材。
 
 **核心组件：**
-- `channel-adapter.ts` — 适配器抽象基类 + 注册工厂
-- `channel-router.ts` — 消息路由（IM → session）
-- `conversation-engine.ts` — 消费 SSE 流、保存消息
-- `permission-broker.ts` — 权限请求转为 IM 内联按钮
-- `delivery-layer.ts` — 消息分片、速率限制、HTML 降级
-- `bridge-manager.ts` — 生命周期编排
-- `markdown/` — Markdown → IR → 渠道特定格式（Telegram HTML / 飞书卡片）
-- `adapters/telegram-adapter.ts` — Telegram 长轮询
-- `adapters/feishu-adapter.ts` — 飞书薄代理（委托给 Channel Plugin）
+- `recorder.ts` — 创建 Chromium browser/context/page，按 segment 顺序执行动作，使用 Playwright `recordVideo` 连续录制整条脚本，并在失败时截图。
+- `actions.ts` — 执行精确动作和语义动作，处理动作后的等待目标。
+- `page-snapshot.ts` — 抽取当前页面可见候选元素，保留角色、名称、文本、层级和 selector hint。
+- `candidate-matcher.ts` — 将用户脚本中的“按钮/链接/字段/文本”匹配为页面唯一候选，区分强/中/弱置信度和歧义。
+- `interaction-rules.ts` — 封装常见 Web 交互规则，例如可点击祖先、输入字段定位、下拉选择和遮挡判断。
+- `demo-page.ts` — 提供 `demo:basic` 内置页面，保证基础示例无需外部 dev server。
 
-### Channel Plugin 层
+## TTS 和音频
 
-`src/lib/channels/` — 结构化渠道插件，提供 `ChannelPlugin<T>` 合约。
+TTS 通过 `src/lib/video-generator/tts/types.ts` 的 `TtsProvider` 接口隔离。当前真实实现是 `src/lib/video-generator/tts/aliyun.ts`，使用 `DASHSCOPE_API_KEY` 调用 DashScope CosyVoice 非实时 HTTP API，再下载音频到本地 `audio/` 目录。
 
-- `types.ts` — `ChannelPlugin`/`ChannelCapabilities`/`ProbeResult`/`CardStreamController` 接口
-- `channel-plugin-adapter.ts` — Plugin → `BaseChannelAdapter` 桥接适配器
-- `feishu/` — 飞书渠道插件（模块化拆分）
-  - `types.ts` — 飞书内部类型常量
-  - `config.ts` — `FeishuConfig` 结构化配置 + 校验
-  - `gateway.ts` — WSClient 生命周期 + 连接状态机 + probe
-  - `inbound.ts` — 入站消息处理 + 资源下载
-  - `outbound.ts` — 出站消息渲染（card/post/permission）
-  - `identity.ts` — Bot 身份解析 + @mention 检测
-  - `policy.ts` — 访问控制 + 群策略
-  - `card-controller.ts` — CardStreamController 接口 + 占位
-  - `index.ts` — `FeishuChannelPlugin` 入口
+音频相关处理分两层：
 
-### Remote Core 层
+| 模块 | 说明 |
+|------|------|
+| `duration.ts` | 根据估算时长、真实音频时长和 buffer 计算 segment 时长 |
+| `audio.ts` | 用 ffprobe 读取音频时长，用 ffmpeg 把分段旁白合并为 `audio/narration.wav` |
 
-`src/lib/remote/` — 远程 Host/Controller/Session/Lease 合约（接口 + 骨架）。
+## ffmpeg 合成
 
-- `types.ts` — `RemoteHost`/`RemoteController`/`SessionLease`/`RemoteEvent` 接口
-- `remote-manager.ts` — 轻量运行时骨架
-- `index.ts` — 公开导出
+`src/lib/video-generator/ffmpeg.ts` 负责最终视频输出。当前渲染优先使用顶层连续录制 clip，根据 segment 的 `videoStartMs` / `videoEndMs` 对画面进行裁切或拼接，再混入旁白音轨并烧录 SRT 字幕。
 
-详细文档：`docs/handover/bridge-system.md`
+输出目录默认是 `video-runs/`，一次运行通常包含：
+
+| 路径 | 内容 |
+|------|------|
+| `audio/{segmentId}.wav` | 每段 TTS 音频 |
+| `audio/narration.wav` | 合并后的完整旁白 |
+| `clips/` | Playwright 录制的视频素材 |
+| `screenshots/{segmentId}.png` | 失败时页面截图 |
+| `timeline.json` | 回填音频、时长和素材后的 timeline |
+| `subtitles.srt` | 字幕文件 |
+| `candidate-report.json` | 语义匹配失败时的候选元素报告 |
+| `run-report.json` | 本次运行成功/失败摘要 |
+| `final.mp4` | 最终可交付视频 |
 
 ## 新增功能标准触及点
 
-添加新功能时通常需要修改以下位置：
+添加新功能时通常需要检查以下位置：
 
 | 触及点 | 路径 | 说明 |
 |--------|------|------|
-| 类型定义 | `src/types/index.ts` | 新增接口/类型 |
-| 数据库 | `src/lib/db.ts` | 新增表或字段（含迁移逻辑） |
-| API 路由 | `src/app/api/{功能名}/route.ts` | 新增 REST 端点 |
-| 页面 | `src/app/{功能名}/page.tsx` | 新增路由页面 |
-| 组件 | `src/components/{功能名}/` | UI 组件 |
-| Hook | `src/hooks/use{功能名}.ts` | 状态管理 Hook |
-| 国际化 | `src/i18n/en.ts` + `zh.ts` | 双语翻译键 |
-| Bridge | `src/lib/bridge/adapters/` + `types.ts` | 如涉及 IM 集成 |
+| 类型定义 | `src/lib/video-generator/types.ts` | 新增 timeline 字段、动作类型、报告字段或错误码 |
+| 脚本解析 | `src/lib/video-generator/script-parser.ts` | 新增用户脚本语法或动作句式 |
+| Timeline 校验 | `src/lib/video-generator/timeline-validator.ts` | 新增字段和动作必须同步校验 |
+| 浏览器动作 | `src/lib/video-generator/browser/actions.ts` | 新增 Playwright 动作执行分支 |
+| 语义匹配 | `src/lib/video-generator/browser/page-snapshot.ts`、`candidate-matcher.ts`、`interaction-rules.ts` | 新增半自动定位和交互规则 |
+| 录制流程 | `src/lib/video-generator/browser/recorder.ts` | 修改录制时序、storage state、截图或连续 clip 行为 |
+| TTS | `src/lib/video-generator/tts/` | 新增或修改语音 provider |
+| 音视频合成 | `src/lib/video-generator/audio.ts`、`ffmpeg.ts`、`subtitles.ts` | 修改 ffprobe/ffmpeg 参数、字幕或输出素材 |
+| 失败报告 | `src/lib/video-generator/report.ts`、`pipeline.ts` | 新增可诊断字段时同步报告和 CLI 展示 |
+| CLI | `src/cli/video-generator.ts` | 新增命令行参数、退出码或 smoke 命令 |
+| 示例 | `examples/video-generator/` | 新增脚本语法或能力时同步用户示例 |
+| 文档 | `docs/handover/`、`docs/insights/`、`docs/research/`、`docs/exec-plans/` | 新功能、大迭代、调研和复盘同步记录 |
 
 ## 关键文档索引
 
 | 文档 | 路径 | 内容 |
 |------|------|------|
-| Bridge 系统 | `docs/handover/bridge-system.md` | 架构、适配器、渲染管线 |
-| Agent 工具集成 | `docs/handover/agent-tooling-todo-bridge.md` | SDK 工具调用、任务桥接 |
-| SDK 集成调研 | `docs/research/chat-sdk-integration-feasibility.md` | Chat SDK 可行性分析 |
-| 上下文存储迁移（调研） | `docs/research/context-storage-migration-plan.md` | 数据库迁移详细方案 |
-| 上下文存储迁移（执行） | `docs/exec-plans/active/context-storage-migration.md` | 分阶段进度 + 决策日志 |
-| 技术债务 | `docs/exec-plans/tech-debt-tracker.md` | 已知技术债务清单 |
-| Provider/Error/Doctor | `docs/handover/provider-error-doctor.md` | 错误分类、Provider 生效、Auth 自动、诊断中心 |
+| 技术交接 | `docs/handover/scripted-browser-video-generator.md` | CLI pipeline、TTS、Playwright 录制、SRT、ffmpeg 合成、失败报告 |
+| 产品思考 | `docs/insights/scripted-browser-video-generator.md` | CLI-first、Playwright、阿里云 TTS、ffmpeg、内置 demo、后续方向 |
+| 初始设计调研 | `docs/research/scripted-browser-video-generator.md` | 自然语言脚本到教程视频的 MVP 设计规格 |
+| TTS API 参考 | `docs/research/非实时语音合成CosyVoice HTTP API参考.md` | DashScope CosyVoice 非实时语音合成 HTTP API 参考 |
+| 产品调试复盘 | `docs/research/video-generator-product-batch-price-adjustment-retrospective-2026-05-22.md` | 产品批量调价视频生成调试复盘 |
+| 完成计划 | `docs/exec-plans/completed/scripted-browser-video-generator.md` | 初始视频生成器执行计划和完成记录 |
+| 连续录制计划 | `docs/exec-plans/active/continuous-video-recording.md` | 连续操作视频录制、selector 等待、storage state 和字幕规范化 |
+| 半自动录制计划 | `docs/exec-plans/active/semi-automatic-web-demo-recorder.md` | 语义动作、候选匹配、常见 Web 交互规则和候选报告 |
 
 ## 技术栈
 
 | 层 | 技术 |
-|----|------|
-| 桌面外壳 | Electron 40 |
-| 前端框架 | Next.js 16 (App Router) + React 19 |
-| 样式 | Tailwind CSS 4 + Radix UI |
-| 数据库 | better-sqlite3 (WAL) |
-| AI 集成 | Claude Agent SDK, @ai-sdk/anthropic, @ai-sdk/google, @ai-sdk/openai |
-| IM 集成 | Telegram Bot API, 飞书 SDK (@larksuiteoapi/node-sdk) |
-| 代码高亮 | Shiki |
-| Markdown | react-markdown, streamdown, markdown-it |
-| 打包 | electron-builder (DMG + NSIS) |
-| 测试 | Playwright (E2E), tsx + node:test (单元) |
+|----|----|
+| 运行时 | Node.js + TypeScript ESM |
+| CLI 执行 | tsx |
+| 浏览器自动化 | Playwright Chromium |
+| TTS | 阿里云 DashScope CosyVoice 非实时 HTTP API |
+| 音频分析 | ffprobe |
+| 视频合成 | ffmpeg |
+| 字幕 | SRT + ffmpeg burn-in |
+| 测试 | TypeScript typecheck、node:test、tsx、Playwright POC |
+| 输出格式 | 本地素材目录 + `final.mp4` |

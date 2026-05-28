@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadVideoGeneratorConfig } from '../lib/video-generator/config.js';
+import { loadProjectEnv } from '../lib/video-generator/env.js';
 import { runVideoGenerator, type RunVideoGeneratorInput } from '../lib/video-generator/pipeline.js';
 import { createAliyunTtsProvider } from '../lib/video-generator/tts/aliyun.js';
 import type { TtsProvider } from '../lib/video-generator/tts/types.js';
@@ -27,7 +28,7 @@ interface ParsedArgs {
 export async function runVideoGeneratorCli(argv: string[], io: VideoGeneratorCliIo = {}): Promise<number> {
   const stdout = io.stdout ?? console.log;
   const stderr = io.stderr ?? console.error;
-  const env = io.env ?? process.env;
+  const env = io.env ?? await loadProjectEnv();
   const parsed = parseArgs(argv);
 
   if (parsed.error !== undefined) {
