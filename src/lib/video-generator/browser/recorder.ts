@@ -130,6 +130,9 @@ export async function recordTimelineSegments({
       `Failed to record segment ${segmentId}; ${screenshotMessage}: ${errorMessage(error)}`,
       currentSegment?.id,
       error instanceof VideoGeneratorError ? error.failedAction ?? currentAction : currentAction,
+      error instanceof VideoGeneratorError && error.diagnostics !== undefined
+        ? { ...error.diagnostics, screenshotPath }
+        : undefined,
     );
   } finally {
     await context?.close().catch(() => undefined);

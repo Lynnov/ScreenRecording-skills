@@ -1,5 +1,31 @@
 import type { Locator, Page } from 'playwright';
-import { VideoGeneratorError, type BrowserAction, type WaitTarget } from '../types.js';
+import {
+  VideoGeneratorError,
+  type ActionCandidateDiagnostic,
+  type ActionFailureDiagnostics,
+  type BrowserAction,
+  type ElementOverlayDiagnostic,
+  type WaitTarget,
+} from '../types.js';
+import { collectDropdownDiagnostic, selectRemoteOption } from './interaction-rules.js';
+
+type BrowserElement = {
+  tagName: string;
+  id: string;
+  className: unknown;
+  textContent?: string | null;
+  isContentEditable?: boolean;
+  contains(element: BrowserElement): boolean;
+  getBoundingClientRect(): { left: number; top: number; width: number; height: number };
+};
+
+type BrowserDocument = {
+  elementFromPoint(x: number, y: number): BrowserElement | null;
+};
+
+type BrowserGlobal = {
+  document: BrowserDocument;
+};
 
 export async function executeBrowserAction(page: Page, action: BrowserAction, timeoutMs: number): Promise<Page> {
   try {
@@ -45,6 +71,20 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
       case 'waitFor':
         await waitForTarget(page, action.target, timeoutMs);
         return page;
+      case 'remoteSelect':
+        await selectRemoteOption({
+          page,
+          selector: action.selector,
+          keyword: action.keyword,
+          optionText: action.optionText,
+          timeoutMs,
+        });
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      case 'uploadFile':
+        await page.locator(action.selector).setInputFiles(action.filePath, { timeout: timeoutMs });
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
       case 'scroll':
         await page.mouse.move((page.viewportSize()?.width ?? 0) / 2, (page.viewportSize()?.height ?? 0) / 2);
         await page.mouse.wheel(0, action.y);
@@ -62,13 +102,20 @@ export async function executeBrowserAction(page: Page, action: BrowserAction, ti
         );
     }
   } catch (error) {
-    if (error instanceof VideoGeneratorError) {
+    if (error instanceof VideoGeneratorError && error.diagnostics !== undefined) {
+      throw error;
+    }
+
+    if (error instanceof VideoGeneratorError && error.code === 'UNSUPPORTED_SCRIPT_ACTION') {
       throw error;
     }
 
     throw new VideoGeneratorError(
       actionErrorCode(action),
       `Browser action failed (${describeAction(action)}): ${errorMessage(error)}`,
+      undefined,
+      action,
+      await collectActionDiagnostics(page, action, failureReason(action, error)),
     );
   }
 }
@@ -168,6 +215,170 @@ async function waitForOptionalTarget(page: Page, target: WaitTarget | undefined,
   }
 }
 
+async function collectActionDiagnostics(
+  page: Page,
+  action: BrowserAction,
+  reason: string,
+): Promise<ActionFailureDiagnostics> {
+  const selector = actionSelector(action);
+  const locator = actionDiagnosticLocator(page, action);
+  const candidateDiagnostics = locator === undefined ? { count: 0, candidates: [] } : await collectCandidateDiagnostics(locator);
+  const dropdowns = action.type === 'remoteSelect' ? await collectDropdownDiagnostic(page, reason) : undefined;
+
+  return {
+    url: page.url(),
+    stageName: action.stageName,
+    actionType: action.type,
+    selector,
+    candidateCount: candidateDiagnostics.count,
+    candidates: candidateDiagnostics.candidates,
+    overlayElement: candidateDiagnostics.candidates.find((candidate) => candidate.overlayElement !== undefined)?.overlayElement,
+    dropdowns,
+    missingText: missingText(action),
+    failureReason: reason,
+  };
+}
+
+async function collectCandidateDiagnostics(locator: Locator): Promise<{ count: number; candidates: ActionCandidateDiagnostic[] }> {
+  const count = await locator.count().catch(() => 0);
+  const candidates: ActionCandidateDiagnostic[] = [];
+
+  for (let index = 0; index < Math.min(count, 5); index += 1) {
+    const candidate = locator.nth(index);
+    const visible = await candidate.isVisible().catch(() => false);
+    const enabled = await candidate.isEnabled().catch(() => undefined);
+    const editable = await candidate.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
+      || element.isContentEditable).catch(() => undefined);
+    const boundingBox = await candidate.boundingBox().catch(() => null);
+    const overlayElement = await candidate.evaluate((element: unknown) => {
+      const target = element as BrowserElement;
+      const rect = target.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return undefined;
+      }
+
+      const pageDocument = (globalThis as unknown as BrowserGlobal).document;
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const topElement = pageDocument.elementFromPoint(centerX, centerY);
+      if (topElement === null || topElement === target || target.contains(topElement)) {
+        return undefined;
+      }
+
+      return {
+        tagName: topElement.tagName.toLowerCase(),
+        id: topElement.id || undefined,
+        className: typeof topElement.className === 'string' && topElement.className.length > 0 ? topElement.className : undefined,
+        text: topElement.textContent?.trim().slice(0, 80) || undefined,
+      };
+    }).catch(() => undefined) as ElementOverlayDiagnostic | undefined;
+
+    candidates.push({
+      index,
+      visible,
+      editable,
+      enabled,
+      ...(boundingBox === null ? {} : { boundingBox }),
+      ...(overlayElement === undefined ? {} : { overlayElement }),
+    });
+  }
+
+  return { count, candidates };
+}
+
+function actionDiagnosticLocator(page: Page, action: BrowserAction): Locator | undefined {
+  switch (action.type) {
+    case 'click':
+    case 'fill':
+      return action.selector !== undefined
+        ? page.locator(action.selector)
+        : action.text === undefined ? undefined : page.getByText(action.text, { exact: true });
+    case 'waitFor':
+      return waitTargetDiagnosticLocator(page, action.target);
+    case 'remoteSelect':
+    case 'uploadFile':
+      return page.locator(action.selector);
+    case 'scrollTo':
+      return page.locator(action.target.value);
+    case 'goto':
+    case 'scroll':
+      return undefined;
+  }
+}
+
+function waitTargetDiagnosticLocator(page: Page, target: WaitTarget): Locator | undefined {
+  switch (target.type) {
+    case 'text':
+      return page.getByText(target.value, { exact: true });
+    case 'selector':
+    case 'hiddenSelector':
+      return page.locator(target.value);
+    case 'url':
+    case 'networkIdle':
+      return undefined;
+  }
+}
+
+function actionSelector(action: BrowserAction): string | undefined {
+  switch (action.type) {
+    case 'click':
+    case 'fill':
+      return action.selector ?? (action.text === undefined ? undefined : `text=${action.text}`);
+    case 'waitFor':
+      return waitTargetSelector(action.target);
+    case 'remoteSelect':
+    case 'uploadFile':
+      return action.selector;
+    case 'scrollTo':
+      return action.target.value;
+    case 'goto':
+    case 'scroll':
+      return undefined;
+  }
+}
+
+function waitTargetSelector(target: WaitTarget): string | undefined {
+  switch (target.type) {
+    case 'text':
+      return `text=${target.value}`;
+    case 'selector':
+    case 'hiddenSelector':
+      return target.value;
+    case 'url':
+    case 'networkIdle':
+      return undefined;
+  }
+}
+
+function missingText(action: BrowserAction): string | undefined {
+  if (action.type === 'waitFor' && action.target.type === 'text') {
+    return action.target.value;
+  }
+
+  if (action.type === 'remoteSelect') {
+    return action.optionText;
+  }
+
+  return undefined;
+}
+
+function failureReason(action: BrowserAction, error: unknown): string {
+  if (action.type === 'remoteSelect') {
+    return remoteSelectFailureReasonFromError(error);
+  }
+
+  return `${action.type} failed`;
+}
+
+function remoteSelectFailureReasonFromError(error: unknown): string {
+  const message = errorMessage(error);
+  if (/Timeout|waiting|locator/i.test(message)) {
+    return 'option text not found';
+  }
+
+  return message;
+}
+
 function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
   switch (action.type) {
     case 'goto':
@@ -178,6 +389,10 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
       return 'INVALID_FILL_TARGET';
     case 'waitFor':
       return 'INVALID_WAIT_TARGET';
+    case 'remoteSelect':
+      return 'INVALID_REMOTE_SELECT_TARGET';
+    case 'uploadFile':
+      return 'INVALID_UPLOAD_FILE_TARGET';
     case 'scroll':
     case 'scrollTo':
       return 'INVALID_SCROLL_Y';
@@ -194,6 +409,10 @@ function describeAction(action: BrowserAction): string {
       return `fill ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
     case 'waitFor':
       return `waitFor ${describeWaitTarget(action.target)}`;
+    case 'remoteSelect':
+      return `remoteSelect selector=${action.selector} optionText=${action.optionText}`;
+    case 'uploadFile':
+      return `uploadFile selector=${action.selector}`;
     case 'scroll':
       return `scroll y=${action.y}`;
     case 'scrollTo':

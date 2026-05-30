@@ -4,21 +4,34 @@ import { validateTimeline } from './timeline-validator.js';
 import {
   VideoGeneratorError,
   type BrowserAction,
+  type StageDefinition,
   type Timeline,
   type TimelineSegment,
   type VideoGeneratorConfig,
 } from './types.js';
 
 export function parseVideoScript(input: string, config: VideoGeneratorConfig): Timeline {
+  const stageContext: StageParseContext = {
+    currentStageName: undefined,
+    stagesByName: new Map(),
+  };
   const blocks = input
     .split(/\r?\n\s*\r?\n/u)
     .map((block) => block.trim())
     .filter(Boolean);
 
-  const segments = blocks.map((block, index) => parseBlock(block, index, config));
+  const segments: TimelineSegment[] = [];
+  for (const block of blocks) {
+    const segment = parseBlock(block, segments.length, config, stageContext);
+    if (segment) {
+      segments.push(segment);
+    }
+  }
+  const stages = Array.from(stageContext.stagesByName.values());
   const timeline: Timeline = {
     version: 1,
     title: '未命名教程视频',
+    ...(stages.length > 0 ? { stages } : {}),
     segments,
   };
 
@@ -26,26 +39,54 @@ export function parseVideoScript(input: string, config: VideoGeneratorConfig): T
   return timeline;
 }
 
-function parseBlock(block: string, index: number, config: VideoGeneratorConfig): TimelineSegment {
+interface StageParseContext {
+  currentStageName: string | undefined;
+  stagesByName: Map<string, StageDefinition>;
+}
+
+function parseBlock(
+  block: string,
+  index: number,
+  config: VideoGeneratorConfig,
+  stageContext: StageParseContext,
+): TimelineSegment | undefined {
   const sourceText = block.trim();
   const lines = sourceText
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean);
-  const narrationLine = lines.find((line) => line.startsWith('旁白：'));
+  const contentLines: string[] = [];
+  const actionStageNames: Array<string | undefined> = [];
+  for (const line of lines) {
+    const parsedStage = parseStageDeclaration(line, stageContext);
+    if (parsedStage) {
+      continue;
+    }
+
+    contentLines.push(line);
+    actionStageNames.push(stageContext.currentStageName);
+  }
+
+  if (contentLines.length === 0) {
+    return undefined;
+  }
+
+  const narrationLine = contentLines.find((line) => line.startsWith('旁白：'));
 
   if (!narrationLine) {
     throw new VideoGeneratorError('MISSING_NARRATION', 'Each script block must contain 旁白：.');
   }
 
   const narration = narrationLine.slice('旁白：'.length).trim();
-  const actionLines = lines.filter((line) => line !== narrationLine);
+  const actionEntries = contentLines
+    .map((line, lineIndex) => ({ line, stageName: actionStageNames[lineIndex] }))
+    .filter((entry) => entry.line !== narrationLine);
 
-  if (actionLines.length === 0) {
+  if (actionEntries.length === 0) {
     throw new VideoGeneratorError('MISSING_ACTION', 'Each script block must contain at least one action.');
   }
 
-  const actions = actionLines.map((line) => parseAction(line));
+  const actions = actionEntries.map((entry) => withStageName(parseAction(entry.line), entry.stageName));
 
   return {
     id: `seg-${String(index + 1).padStart(3, '0')}`,
@@ -57,6 +98,108 @@ function parseBlock(block: string, index: number, config: VideoGeneratorConfig):
     bufferMs: config.segmentBufferMs,
     assets: {},
   };
+}
+
+function parseStageDeclaration(line: string, stageContext: StageParseContext): boolean {
+  if (!/^@stage(?:\s|$)/u.test(line)) {
+    return false;
+  }
+
+  const declaration = line.slice('@stage'.length).trim();
+  const tokens = readStageTokens(declaration, line);
+  const stageName = tokens.shift();
+
+  if (!stageName) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Stage declaration must include a stage name: ${line}`);
+  }
+
+  if (stageName.includes('=')) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Stage declaration must put the stage name before options: ${line}`);
+  }
+
+  const stage = stageContext.stagesByName.get(stageName) ?? { name: stageName, anchors: [] };
+  for (const token of tokens) {
+    const option = parseStageOption(token, line);
+    if (option.name === 'scope') {
+      stage.scope = option.value;
+      continue;
+    }
+
+    if (!stage.anchors.includes(option.value)) {
+      stage.anchors.push(option.value);
+    }
+  }
+
+  stageContext.currentStageName = stageName;
+  stageContext.stagesByName.set(stageName, stage);
+  return true;
+}
+
+function readStageTokens(input: string, line: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | undefined;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (/\s/u.test(char)) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (quote) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Stage declaration has an unterminated quoted option: ${line}`);
+  }
+
+  if (current.length > 0) {
+    tokens.push(current);
+  }
+
+  return tokens;
+}
+
+function parseStageOption(token: string, line: string): { name: 'scope' | 'anchor'; value: string } {
+  const separatorIndex = token.indexOf('=');
+  if (separatorIndex < 0) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Stage option must use key=value syntax: ${token} in ${line}`);
+  }
+
+  const name = token.slice(0, separatorIndex);
+  if (name !== 'scope' && name !== 'anchor') {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Unsupported stage option "${name}" in ${line}`);
+  }
+
+  const rawValue = token.slice(separatorIndex + 1);
+  const value = stripWrappingQuotes(rawValue);
+  if (!value) {
+    throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Stage option "${name}" must not be empty in ${line}`);
+  }
+
+  return { name, value };
+}
+
+function withStageName(action: BrowserAction, stageName: string | undefined): BrowserAction {
+  return stageName ? { ...action, stageName } : action;
 }
 
 function parseAction(line: string): BrowserAction {

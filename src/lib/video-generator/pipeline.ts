@@ -5,16 +5,18 @@ import { mergeAudioSegments, type MergeAudioSegmentsInput } from './audio.js';
 import { loadVideoGeneratorConfig, type VideoGeneratorConfigOverrides } from './config.js';
 import { renderFinalVideo, type RenderFinalVideoInput } from './ffmpeg.js';
 import { recordTimelineSegments, type RecordTimelineSegmentsInput } from './browser/recorder.js';
-import { writeRunReport } from './report.js';
+import { runPreflightChecks, type PreflightPageLike } from './preflight.js';
+import { writePreflightReport, writeRunReport } from './report.js';
 import { parseVideoScript } from './script-parser.js';
 import { renderSrt } from './subtitles.js';
 import { createAliyunTtsProvider } from './tts/aliyun.js';
 import type { TtsProvider } from './tts/types.js';
-import { VideoGeneratorError, type RunReport, type Timeline, type VideoGeneratorConfig } from './types.js';
+import { VideoGeneratorError, type ActionFailureDiagnostics, type RunReport, type Timeline, type VideoGeneratorConfig } from './types.js';
 
 export interface RunVideoGeneratorDeps {
   ttsProvider?: TtsProvider;
   mergeAudioSegments?: (input: MergeAudioSegmentsInput) => Promise<string>;
+  preflightPage?: PreflightPageLike;
   recordTimelineSegments?: (input: RecordTimelineSegmentsInput) => Promise<Timeline>;
   renderFinalVideo?: (input: RenderFinalVideoInput) => Promise<string>;
 }
@@ -34,6 +36,7 @@ export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<
     await mkdir(audioDir, { recursive: true });
     const script = await readFile(input.scriptPath, 'utf8');
     const parsedTimeline = parseVideoScript(script, config);
+    const preflightReportPath = await maybeWritePreflightReport(parsedTimeline, outputDir, input.deps?.preflightPage);
     const timelineWithAudio = await synthesizeTimelineAudio({
       timeline: parsedTimeline,
       outputDir,
@@ -77,6 +80,7 @@ export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<
       finalVideoPath,
       timelinePath,
       subtitlesPath,
+      preflightReportPath,
     };
     await writeRunReport(report);
     return report;
@@ -85,6 +89,19 @@ export async function runVideoGenerator(input: RunVideoGeneratorInput): Promise<
     await writeRunReport(report);
     return report;
   }
+}
+
+async function maybeWritePreflightReport(
+  timeline: Timeline,
+  outputDir: string,
+  page: PreflightPageLike | undefined,
+): Promise<string | undefined> {
+  if (page === undefined || timeline.stages === undefined || timeline.stages.length === 0) {
+    return undefined;
+  }
+
+  const report = await runPreflightChecks({ timeline, page, outputDir });
+  return writePreflightReport(report);
 }
 
 async function synthesizeTimelineAudio(input: {
@@ -151,8 +168,21 @@ function makeFailureReport(outputDir: string, error: unknown): RunReport {
     failedSegmentId: extractSegmentId(error),
     errorMessage: error instanceof Error ? error.message : String(error),
     screenshotPath: extractScreenshotPath(error),
-    failedAction: extractFailedAction(error),
+    failedAction: redactFailedAction(extractFailedAction(error)),
+    diagnostics: extractDiagnostics(error),
   };
+}
+
+function redactFailedAction(action: RunReport['failedAction']): RunReport['failedAction'] {
+  if (action?.type === 'fill') {
+    return { ...action, value: '[REDACTED]' };
+  }
+
+  if (action?.type === 'remoteSelect') {
+    return { ...action, keyword: '[REDACTED]' };
+  }
+
+  return action;
 }
 
 function extractSegmentId(error: unknown): string | undefined {
@@ -170,6 +200,15 @@ function extractFailedAction(error: unknown): RunReport['failedAction'] {
 
   const failedAction = readObjectProperty(error, 'failedAction');
   return failedAction as RunReport['failedAction'];
+}
+
+function extractDiagnostics(error: unknown): ActionFailureDiagnostics | undefined {
+  if (error instanceof VideoGeneratorError) {
+    return error.diagnostics;
+  }
+
+  const diagnostics = readObjectProperty(error, 'diagnostics');
+  return diagnostics as ActionFailureDiagnostics | undefined;
 }
 
 function extractScreenshotPath(error: unknown): string | undefined {

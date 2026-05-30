@@ -106,6 +106,27 @@ function validateAction(action: unknown, segmentId: string | undefined): void {
     case 'waitFor':
       validateWaitTarget(action.target, segmentId);
       return;
+    case 'remoteSelect':
+      if (typeof action.selector !== 'string' || !action.selector.trim()) {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action must include a selector.', segmentId);
+      }
+      if (typeof action.keyword !== 'string') {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action keyword must be a string.', segmentId);
+      }
+      if (typeof action.optionText !== 'string' || !action.optionText.trim()) {
+        throw new VideoGeneratorError('INVALID_REMOTE_SELECT_TARGET', 'Remote select action must include optionText.', segmentId);
+      }
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
+    case 'uploadFile':
+      if (typeof action.selector !== 'string' || !action.selector.trim()) {
+        throw new VideoGeneratorError('INVALID_UPLOAD_FILE_TARGET', 'Upload file action must include a selector.', segmentId);
+      }
+      if (typeof action.filePath !== 'string' || !action.filePath.trim()) {
+        throw new VideoGeneratorError('INVALID_UPLOAD_FILE_TARGET', 'Upload file action must include a filePath.', segmentId);
+      }
+      validateOptionalWaitFor(action.waitFor, segmentId);
+      return;
     case 'scroll':
       if (typeof action.y !== 'number' || !Number.isFinite(action.y)) {
         throw new VideoGeneratorError('INVALID_SCROLL_Y', 'Scroll action y must be a finite number.', segmentId);

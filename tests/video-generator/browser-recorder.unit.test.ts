@@ -864,15 +864,24 @@ test('recordTimelineSegments screenshots failed segment actions', async () => {
       title: 'Recorder failure',
       segments: [
         {
-          id: 'missing-click',
-          sourceText: 'missing',
-          narration: 'missing',
-          subtitle: 'missing',
+          id: 'overlay-click',
+          sourceText: 'overlay',
+          narration: 'overlay',
+          subtitle: 'overlay',
           estimatedDurationMs: 100,
           bufferMs: 0,
           actions: [
-            { type: 'goto', url: demoDataUrl('<main><button>Exists</button></main>') },
-            { type: 'click', text: 'Missing' },
+            {
+              type: 'goto',
+              url: demoDataUrl(`
+                <main>
+                  <button id="cta" style="position:absolute; left:24px; top:24px; width:120px; height:40px">继续</button>
+                  <button id="ghost" style="position:absolute; left:24px; top:84px; width:120px; height:40px">继续</button>
+                  <div id="overlay" style="position:absolute; inset:0; z-index:10"></div>
+                </main>
+              `),
+            },
+            { type: 'click', text: '继续' },
           ],
           assets: {},
         },
@@ -882,13 +891,15 @@ test('recordTimelineSegments screenshots failed segment actions', async () => {
     await assert.rejects(
       () => recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir }),
       (error) => {
-        const screenshotPath = join(outputDir, 'screenshots', 'missing-click.png');
+        const screenshotPath = join(outputDir, 'screenshots', 'overlay-click.png');
         assert.ok(error instanceof VideoGeneratorError);
-        assert.equal(error.segmentId, 'missing-click');
-        assert.match(error.message, /missing-click/);
+        assert.equal(error.segmentId, 'overlay-click');
+        assert.match(error.message, /overlay-click/);
         assert.match(error.message, new RegExp(screenshotPath.replaceAll('\\', '\\\\')));
         assert.equal(existsSync(screenshotPath), true);
-        assert.deepEqual((error as { failedAction?: unknown }).failedAction, { type: 'click', text: 'Missing' });
+        assert.deepEqual((error as { failedAction?: unknown }).failedAction, { type: 'click', text: '继续' });
+        assert.equal(error.diagnostics?.overlayElement?.id, 'overlay');
+        assert.equal(error.diagnostics?.screenshotPath, screenshotPath);
         return true;
       },
     );

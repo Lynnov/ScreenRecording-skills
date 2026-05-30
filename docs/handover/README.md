@@ -33,3 +33,4 @@
 | decouple-native-runtime.md | Native Agent Runtime：双 Runtime 架构、AI SDK agent-loop、OpenAI Codex 集成、文件快照 rewind、MCP 全链路、验证边界与剩余风险 |
 | markdown-artifact-overhaul.md | Markdown 渲染 × Artifact 预览体系：PreviewSource 联合、DiffSummary 卡片、Sandpack 单文件 React、CodeMirror 编辑+自动保存、长图导出 IPC、文件 I/O API 合同、loadedPath/freshPreview 防漂移 |
 | scripted-browser-video-generator.md | 脚本驱动浏览器教程视频生成器：CLI pipeline、阿里云 TTS、Playwright 分段录制、SRT、ffmpeg 合成、失败报告 |
+| video-generator-recording-reliability.md | 视频生成器录制可靠性二期：Stage 语法、preflight 诊断、动作失败 diagnostics、截图报告透传 |

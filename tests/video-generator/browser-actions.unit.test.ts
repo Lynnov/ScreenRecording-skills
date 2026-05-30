@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { executeBrowserAction, waitForTarget } from '../../src/lib/video-generator/browser/actions.js';
-import { VideoGeneratorError } from '../../src/lib/video-generator/types.js';
+import { VideoGeneratorError, type ActionFailureDiagnostics } from '../../src/lib/video-generator/types.js';
 
 async function withPage(run: (page: Page) => Promise<void>): Promise<void> {
   let browser: Browser | undefined;
@@ -268,3 +268,129 @@ test('executeBrowserAction preserves label fill failure when placeholder fallbac
     assert.equal(await page.locator('#fallback').inputValue(), '');
   });
 });
+
+test('executeBrowserAction reports overlay and duplicate-text candidates together', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button id="first" style="position:absolute; left:20px; top:20px; width:120px; height:40px">继续</button>
+      <button id="second" style="position:absolute; left:20px; top:80px; width:120px; height:40px">继续</button>
+      <div id="overlay" style="position:absolute; inset:0; z-index:10"></div>
+    `);
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'click', text: '继续', stageName: 'checkout.confirm' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.stageName, 'checkout.confirm');
+        assert.equal(diagnostics?.selector, 'text=继续');
+        assert.equal(diagnostics?.candidateCount, 2);
+        assert.equal(diagnostics?.candidates.length, 2);
+        assert.equal(diagnostics?.candidates[0]?.overlayElement?.id, 'overlay');
+        assert.equal(diagnostics?.overlayElement?.id, 'overlay');
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_CLICK_TARGET';
+      },
+    );
+  });
+});
+
+test('executeBrowserAction uses exact text matching for text target diagnostics', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button disabled>保存订单</button>
+      <button disabled>保存订单草稿</button>
+    `);
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'click', text: '保存订单' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.selector, 'text=保存订单');
+        assert.equal(diagnostics?.candidateCount, 1);
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_CLICK_TARGET';
+      },
+    );
+  });
+});
+
+test('executeBrowserAction reports total candidate count separately from sampled diagnostics', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button class="candidate" disabled>One</button>
+      <button class="candidate" disabled>Two</button>
+      <button class="candidate" disabled>Three</button>
+      <button class="candidate" disabled>Four</button>
+      <button class="candidate" disabled>Five</button>
+      <button class="candidate" disabled>Six</button>
+    `);
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'click', selector: '.candidate' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.candidateCount, 6);
+        assert.equal(diagnostics?.candidates.length, 5);
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_CLICK_TARGET';
+      },
+    );
+  });
+});
+
+test('executeBrowserAction attaches diagnostics for failed click, fill, wait, and upload actions', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button id="covered" style="position:absolute; left:20px; top:20px; width:100px; height:40px">Covered</button>
+      <div id="overlay" style="position:absolute; left:0; top:0; width:200px; height:100px; z-index:2"></div>
+      <button class="locked">Locked</button>
+    `);
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'click', selector: '#covered', stageName: 'dialog.submit' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.stageName, 'dialog.submit');
+        assert.equal(diagnostics?.selector, '#covered');
+        assert.equal(diagnostics?.candidateCount, 1);
+        assert.equal(diagnostics?.candidates[0]?.visible, true);
+        assert.equal(diagnostics?.candidates[0]?.overlayElement?.id, 'overlay');
+        assert.equal(diagnostics?.failureReason, 'click failed');
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_CLICK_TARGET';
+      },
+    );
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'fill', selector: '.locked', value: 'sensitive value' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.selector, '.locked');
+        assert.equal(diagnostics?.candidateCount, 1);
+        assert.equal(diagnostics?.candidates[0]?.editable, false);
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_FILL_TARGET';
+      },
+    );
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'waitFor', target: { type: 'text', value: 'Never appears' } }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.selector, 'text=Never appears');
+        assert.equal(diagnostics?.candidateCount, 0);
+        assert.equal(diagnostics?.missingText, 'Never appears');
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_WAIT_TARGET';
+      },
+    );
+
+    await assert.rejects(
+      () => executeBrowserAction(page, { type: 'uploadFile', selector: 'input[type=file]', filePath: '/tmp/missing.txt' }, 100),
+      (error) => {
+        const diagnostics = diagnosticsFrom(error);
+        assert.equal(diagnostics?.selector, 'input[type=file]');
+        assert.equal(diagnostics?.candidateCount, 0);
+        return error instanceof VideoGeneratorError && error.code === 'INVALID_UPLOAD_FILE_TARGET';
+      },
+    );
+  });
+});
+
+function diagnosticsFrom(error: unknown): ActionFailureDiagnostics | undefined {
+  return error instanceof VideoGeneratorError ? error.diagnostics : undefined;
+}

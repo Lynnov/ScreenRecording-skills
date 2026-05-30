@@ -5,13 +5,99 @@ export type WaitTarget =
   | { type: 'url'; value: string }
   | { type: 'networkIdle' };
 
+export interface BrowserActionBase {
+  stageName?: string;
+}
+
 export type BrowserAction =
-  | { type: 'goto'; url: string; waitFor?: WaitTarget }
-  | { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget }
-  | { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget }
-  | { type: 'waitFor'; target: WaitTarget }
-  | { type: 'scroll'; y: number; waitFor?: WaitTarget }
-  | { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget };
+  | (BrowserActionBase & { type: 'goto'; url: string; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'click'; text?: string; selector?: string; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'fill'; text?: string; selector?: string; value: string; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'waitFor'; target: WaitTarget })
+  | (BrowserActionBase & { type: 'remoteSelect'; selector: string; keyword: string; optionText: string; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'uploadFile'; selector: string; filePath: string; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'scroll'; y: number; waitFor?: WaitTarget })
+  | (BrowserActionBase & { type: 'scrollTo'; target: Extract<WaitTarget, { type: 'selector' }>; waitFor?: WaitTarget });
+
+export interface StageDefinition {
+  name: string;
+  scope?: string;
+  anchors: string[];
+}
+
+export interface StageAnchorDiagnostic {
+  selector: string;
+  matched: boolean;
+  count: number;
+}
+
+export interface StageDiagnostic {
+  stageName: string;
+  scope?: string;
+  scopeMatched?: boolean;
+  scopeCount?: number;
+  matched: boolean;
+  anchors: StageAnchorDiagnostic[];
+  missingAnchors: string[];
+}
+
+export interface PreflightCheck {
+  name: string;
+  ok: boolean;
+  message: string;
+  stageName?: string;
+}
+
+export interface PreflightReport {
+  ok: boolean;
+  outputDir: string;
+  checks: PreflightCheck[];
+  stageDiagnostics: StageDiagnostic[];
+}
+
+export interface ElementOverlayDiagnostic {
+  tagName?: string;
+  id?: string;
+  className?: string;
+  text?: string;
+}
+
+export interface ElementBoxDiagnostic {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ActionCandidateDiagnostic {
+  index: number;
+  visible: boolean;
+  editable?: boolean;
+  enabled?: boolean;
+  boundingBox?: ElementBoxDiagnostic;
+  overlayElement?: ElementOverlayDiagnostic;
+}
+
+export interface DropdownDiagnostic {
+  popperCount: number;
+  visibleItemCount: number;
+  hiddenContainerCount: number;
+  failureReason?: string;
+}
+
+export interface ActionFailureDiagnostics {
+  url: string;
+  stageName?: string;
+  actionType: BrowserAction['type'];
+  selector?: string;
+  candidateCount: number;
+  candidates: ActionCandidateDiagnostic[];
+  overlayElement?: ElementOverlayDiagnostic;
+  screenshotPath?: string;
+  dropdowns?: DropdownDiagnostic;
+  missingText?: string;
+  failureReason: string;
+}
 
 export interface TimelineSegmentAssets {
   audioPath?: string;
@@ -46,6 +132,7 @@ export interface Timeline {
   version: 1;
   title: string;
   assets?: TimelineAssets;
+  stages?: StageDefinition[];
   segments: TimelineSegment[];
 }
 
@@ -66,6 +153,7 @@ export interface VideoGeneratorConfig {
 export interface RunReport {
   ok: boolean;
   outputDir: string;
+  preflightReportPath?: string;
   finalVideoPath?: string;
   timelinePath?: string;
   subtitlesPath?: string;
@@ -73,6 +161,7 @@ export interface RunReport {
   failedAction?: BrowserAction;
   errorMessage?: string;
   screenshotPath?: string;
+  diagnostics?: ActionFailureDiagnostics;
 }
 
 export type VideoGeneratorErrorCode =
@@ -90,12 +179,15 @@ export type VideoGeneratorErrorCode =
   | 'INVALID_FILL_TARGET'
   | 'INVALID_FILL_VALUE'
   | 'INVALID_WAIT_TARGET'
+  | 'INVALID_REMOTE_SELECT_TARGET'
+  | 'INVALID_UPLOAD_FILE_TARGET'
   | 'INVALID_SCROLL_Y'
   | 'MISSING_NARRATION'
   | 'MISSING_ACTION'
   | 'UNSUPPORTED_SCRIPT_ACTION'
   | 'FFPROBE_FAILED'
   | 'FFMPEG_FAILED'
+  | 'INVALID_OUTPUT_DIR'
   | 'MISSING_TTS_CONFIG'
   | 'TTS_SYNTHESIS_FAILED'
   | 'TTS_PROVIDER_NOT_IMPLEMENTED';
@@ -104,12 +196,20 @@ export class VideoGeneratorError extends Error {
   readonly code: VideoGeneratorErrorCode;
   readonly segmentId?: string;
   readonly failedAction?: BrowserAction;
+  readonly diagnostics?: ActionFailureDiagnostics;
 
-  constructor(code: VideoGeneratorErrorCode, message: string, segmentId?: string, failedAction?: BrowserAction) {
+  constructor(
+    code: VideoGeneratorErrorCode,
+    message: string,
+    segmentId?: string,
+    failedAction?: BrowserAction,
+    diagnostics?: ActionFailureDiagnostics,
+  ) {
     super(message);
     this.name = 'VideoGeneratorError';
     this.code = code;
     this.segmentId = segmentId;
     this.failedAction = failedAction;
+    this.diagnostics = diagnostics;
   }
 }

@@ -79,6 +79,52 @@ test('runVideoGenerator writes artifacts and success report with injected depend
   }
 });
 
+test('runVideoGenerator writes preflight report when stages and preflight page are provided', async () => {
+  const outputDir = path.join(tmpdir(), `pipeline-preflight-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const scriptPath = path.join(outputDir, 'script.md');
+  await writeFile(scriptPath, [
+    '@stage demo.form scope="main" anchor="button"',
+    '打开 http://127.0.0.1:4321/demo',
+    '旁白：打开页面',
+    '',
+    '@stage demo.form',
+    '点击 开始',
+    '旁白：点击按钮',
+  ].join('\n'));
+  const ttsProvider: TtsProvider = {
+    async synthesize(request) {
+      await writeFile(request.outputPath, `audio:${request.segmentId}`);
+      return { segmentId: request.segmentId, audioPath: request.outputPath, durationMs: 1000 };
+    },
+  };
+
+  try {
+    const report = await runVideoGenerator({
+      scriptPath,
+      configOverrides: { outputDir },
+      deps: {
+        ttsProvider,
+        preflightPage: {
+          locator: (selector: string) => ({
+            count: async () => selector === 'main' || selector === 'main >> button' ? 1 : 0,
+          }),
+        },
+        recordTimelineSegments: async ({ timeline }) => timeline,
+        mergeAudioSegments: async (input) => input.outputPath,
+        renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
+      },
+    });
+
+    assert.equal(report.ok, true);
+    assert.equal(report.preflightReportPath, path.join(outputDir, 'preflight-report.json'));
+    const preflightReport = JSON.parse(await readFile(path.join(outputDir, 'preflight-report.json'), 'utf8')) as { stageDiagnostics: unknown[] };
+    assert.equal(preflightReport.stageDiagnostics.length, 1);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('runVideoGenerator merges synthesized narration and passes it to renderer', async () => {
   const outputDir = path.join(tmpdir(), `pipeline-audio-${process.pid}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
@@ -168,11 +214,21 @@ test('runVideoGenerator passes timeline segment durations to audio merge', async
   }
 });
 
-test('runVideoGenerator writes failed action into failure report', async () => {
+test('runVideoGenerator writes failed action diagnostics into failure report', async () => {
   const outputDir = path.join(tmpdir(), `pipeline-failed-action-${process.pid}-${Date.now()}`);
   await mkdir(outputDir, { recursive: true });
   const scriptPath = await makeScriptFile(outputDir);
-  const failedAction = { type: 'click' as const, text: 'Missing' };
+  const failedAction = { type: 'fill' as const, selector: '#token', value: 'secret-token' };
+  const diagnostics = {
+    url: 'http://127.0.0.1/form',
+    stageName: 'token.stage',
+    actionType: 'fill' as const,
+    selector: '#token',
+    candidateCount: 1,
+    candidates: [{ index: 0, visible: true, editable: false }],
+    screenshotPath: path.join(outputDir, 'screenshots', 'seg-002.png'),
+    failureReason: 'fill failed',
+  };
   const ttsProvider: TtsProvider = {
     async synthesize(request) {
       await writeFile(request.outputPath, `audio:${request.segmentId}`);
@@ -187,8 +243,8 @@ test('runVideoGenerator writes failed action into failure report', async () => {
       deps: {
         ttsProvider,
         recordTimelineSegments: async () => {
-          const error = new Error('click target not found');
-          Object.assign(error, { segmentId: 'seg-002', failedAction });
+          const error = new Error('fill target not editable');
+          Object.assign(error, { segmentId: 'seg-002', failedAction, diagnostics });
           throw error;
         },
         renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
@@ -196,10 +252,12 @@ test('runVideoGenerator writes failed action into failure report', async () => {
     });
 
     assert.equal(report.ok, false);
-    assert.deepEqual(report.failedAction, failedAction);
+    assert.deepEqual(report.failedAction, { type: 'fill', selector: '#token', value: '[REDACTED]' });
+    assert.deepEqual(report.diagnostics, diagnostics);
 
     const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
-    assert.deepEqual(written.failedAction, failedAction);
+    assert.deepEqual(written.failedAction, { type: 'fill', selector: '#token', value: '[REDACTED]' });
+    assert.deepEqual(written.diagnostics, diagnostics);
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
@@ -254,6 +312,19 @@ test('runVideoGenerator writes failure report with failed segment and screenshot
   await mkdir(outputDir, { recursive: true });
   const scriptPath = await makeScriptFile(outputDir);
   const screenshotPath = path.join(outputDir, 'screenshots', 'seg-002.png');
+  const diagnostics = {
+    url: 'http://127.0.0.1/form',
+    actionType: 'click' as const,
+    selector: 'text=继续',
+    candidateCount: 2,
+    candidates: [
+      { index: 0, visible: true, overlayElement: { tagName: 'div', id: 'overlay' } },
+      { index: 1, visible: true },
+    ],
+    overlayElement: { tagName: 'div', id: 'overlay' },
+    screenshotPath,
+    failureReason: 'click failed',
+  };
   const ttsProvider: TtsProvider = {
     async synthesize(request) {
       await writeFile(request.outputPath, `audio:${request.segmentId}`);
@@ -269,7 +340,7 @@ test('runVideoGenerator writes failure report with failed segment and screenshot
         ttsProvider,
         recordTimelineSegments: async () => {
           const error = new Error(`Failed to record segment seg-002; screenshot saved to ${screenshotPath}: missing button`);
-          Object.assign(error, { segmentId: 'seg-002', screenshotPath });
+          Object.assign(error, { segmentId: 'seg-002', screenshotPath, diagnostics });
           throw error;
         },
         renderFinalVideo: async () => path.join(outputDir, 'final.mp4'),
@@ -279,12 +350,14 @@ test('runVideoGenerator writes failure report with failed segment and screenshot
     assert.equal(report.ok, false);
     assert.equal(report.failedSegmentId, 'seg-002');
     assert.equal(report.screenshotPath, screenshotPath);
+    assert.deepEqual(report.diagnostics, diagnostics);
     assert.match(report.errorMessage ?? '', /missing button/);
 
     const written = JSON.parse(await readFile(path.join(outputDir, 'run-report.json'), 'utf8')) as typeof report;
     assert.equal(written.ok, false);
     assert.equal(written.failedSegmentId, 'seg-002');
     assert.equal(written.screenshotPath, screenshotPath);
+    assert.deepEqual(written.diagnostics, diagnostics);
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }

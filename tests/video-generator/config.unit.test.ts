@@ -27,6 +27,11 @@ test('loadVideoGeneratorConfig merges overrides without dropping nested viewport
   });
 });
 
+test('loadVideoGeneratorConfig treats blank outputDir as the default output directory', () => {
+  assert.equal(loadVideoGeneratorConfig({ outputDir: '' }).outputDir, './video-runs');
+  assert.equal(loadVideoGeneratorConfig({ outputDir: '   ' }).outputDir, './video-runs');
+});
+
 test('loadVideoGeneratorConfig supports a Playwright storage state path', () => {
   assert.equal(loadVideoGeneratorConfig({ storageStatePath: 'auth/state.json' }).storageStatePath, 'auth/state.json');
 });

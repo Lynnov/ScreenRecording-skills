@@ -17,9 +17,12 @@ const DEFAULT_CONFIG: VideoGeneratorConfig = {
 export function loadVideoGeneratorConfig(
   overrides: VideoGeneratorConfigOverrides = {},
 ): VideoGeneratorConfig {
+  const outputDir = overrides.outputDir?.trim() ? overrides.outputDir : DEFAULT_CONFIG.outputDir;
+
   return {
     ...DEFAULT_CONFIG,
     ...overrides,
+    outputDir,
     viewport: {
       ...DEFAULT_CONFIG.viewport,
       ...overrides.viewport,

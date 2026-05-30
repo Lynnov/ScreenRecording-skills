@@ -115,6 +115,162 @@ test('parseVideoScript maps built-in demo actions to a playable data URL', () =>
   }
 });
 
+test('parseVideoScript attaches stageName to actions after a stage alias declaration', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`@stage orderEntry.list
+
+旁白：进入订单列表
+打开 https://example.com/orders
+等待选择器 .order-list
+
+旁白：查看订单列表
+点击 "查询"`, config);
+
+  assert.deepEqual(timeline.stages, [{ name: 'orderEntry.list', anchors: [] }]);
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'goto', url: 'https://example.com/orders', stageName: 'orderEntry.list' },
+    { type: 'waitFor', target: { type: 'selector', value: '.order-list' }, stageName: 'orderEntry.list' },
+  ]);
+  assert.deepEqual(timeline.segments[1].actions, [
+    { type: 'click', text: '查询', stageName: 'orderEntry.list' },
+  ]);
+});
+
+test('parseVideoScript parses stage scope and multiple anchors and merges repeated declarations', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`@stage orderEntry.createDialog scope=.el-dialog:visible anchor="text=新增订单" anchor="input[placeholder='请选择客户名称']"
+
+旁白：打开新增订单弹窗
+点击 "新增订单"
+
+@stage orderEntry.createDialog anchor="text=保存"
+
+旁白：填写订单信息
+在选择器 input[placeholder='请选择客户名称'] 输入 测试客户`, config);
+
+  assert.deepEqual(timeline.stages, [
+    {
+      name: 'orderEntry.createDialog',
+      scope: '.el-dialog:visible',
+      anchors: ['text=新增订单', "input[placeholder='请选择客户名称']", 'text=保存'],
+    },
+  ]);
+  assert.deepEqual(timeline.segments[1].actions, [
+    {
+      type: 'fill',
+      selector: "input[placeholder='请选择客户名称']",
+      value: '测试客户',
+      stageName: 'orderEntry.createDialog',
+    },
+  ]);
+});
+
+test('parseVideoScript parses quoted stage options containing spaces', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`@stage orderEntry.createDialog scope=".dialog title" anchor="text=保存 订单"
+
+旁白：保存订单
+点击 "保存 订单"`, config);
+
+  assert.deepEqual(timeline.stages, [
+    {
+      name: 'orderEntry.createDialog',
+      scope: '.dialog title',
+      anchors: ['text=保存 订单'],
+    },
+  ]);
+});
+
+test('parseVideoScript rejects empty stage option values with a clear error', () => {
+  const config = loadVideoGeneratorConfig();
+
+  assert.throws(() => parseVideoScript('@stage orderEntry.createDialog anchor=', config), (error) => {
+    assert.ok(error instanceof VideoGeneratorError);
+    assert.equal(error.code, 'UNSUPPORTED_SCRIPT_ACTION');
+    assert.match(error.message, /anchor.*must not be empty/u);
+    return true;
+  });
+});
+
+test('parseVideoScript rejects unknown stage options with a clear error', () => {
+  const config = loadVideoGeneratorConfig();
+
+  assert.throws(() => parseVideoScript('@stage orderEntry.createDialog foo=bar', config), (error) => {
+    assert.ok(error instanceof VideoGeneratorError);
+    assert.equal(error.code, 'UNSUPPORTED_SCRIPT_ACTION');
+    assert.match(error.message, /Unsupported stage option "foo"/u);
+    return true;
+  });
+});
+
+test('parseVideoScript does not treat @stagefoo as a stage declaration', () => {
+  const config = loadVideoGeneratorConfig();
+
+  assert.throws(() => parseVideoScript('旁白：执行未知指令\n@stagefoo orderEntry.list', config), (error) => {
+    assert.ok(error instanceof VideoGeneratorError);
+    assert.equal(error.code, 'UNSUPPORTED_SCRIPT_ACTION');
+    assert.match(error.message, /@stagefoo orderEntry\.list/u);
+    return true;
+  });
+});
+
+test('parseVideoScript rejects empty stage declarations with a clear error', () => {
+  const config = loadVideoGeneratorConfig();
+
+  assert.throws(() => parseVideoScript('@stage', config), (error) => {
+    assert.ok(error instanceof VideoGeneratorError);
+    assert.equal(error.code, 'UNSUPPORTED_SCRIPT_ACTION');
+    assert.match(error.message, /must include a stage name/u);
+    return true;
+  });
+});
+
+test('parseVideoScript rejects stage options without a stage name with a clear error', () => {
+  const config = loadVideoGeneratorConfig();
+
+  assert.throws(() => parseVideoScript('@stage scope=.x', config), (error) => {
+    assert.ok(error instanceof VideoGeneratorError);
+    assert.equal(error.code, 'UNSUPPORTED_SCRIPT_ACTION');
+    assert.match(error.message, /must put the stage name before options/u);
+    return true;
+  });
+});
+
+test('parseVideoScript binds actions to the nearest preceding stage inside the same block', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript(`旁白：同一段内切换区域
+打开 https://example.com/orders
+@stage orderEntry.list
+点击 "查询"
+@stage orderEntry.createDialog scope=.el-dialog:visible
+在选择器 input[name='customer'] 输入 测试客户`, config);
+
+  assert.deepEqual(timeline.stages, [
+    { name: 'orderEntry.list', anchors: [] },
+    { name: 'orderEntry.createDialog', scope: '.el-dialog:visible', anchors: [] },
+  ]);
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'goto', url: 'https://example.com/orders' },
+    { type: 'click', text: '查询', stageName: 'orderEntry.list' },
+    {
+      type: 'fill',
+      selector: "input[name='customer']",
+      value: '测试客户',
+      stageName: 'orderEntry.createDialog',
+    },
+  ]);
+});
+
+test('parseVideoScript keeps legacy scripts without stageName when no stage alias is declared', () => {
+  const config = loadVideoGeneratorConfig();
+  const timeline = parseVideoScript('旁白：打开页面\n打开 https://example.com', config);
+
+  assert.equal(timeline.stages, undefined);
+  assert.deepEqual(timeline.segments[0].actions, [
+    { type: 'goto', url: 'https://example.com' },
+  ]);
+});
+
 test('Pacdora example reveals the tray box card before opening its detail page', async () => {
   const script = await readFile('examples/video-generator/pacdora-dieline.md', 'utf8');
   const detailUrl = 'https://www.pacdora.cn/dielines-detail/custom-dimensions-tray-boxes-dieline-128020';
