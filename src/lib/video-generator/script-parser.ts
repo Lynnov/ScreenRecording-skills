@@ -85,6 +85,26 @@ function parseAction(line: string): BrowserAction {
     return { type: 'semanticClick', target: { kind: 'link', name: stripWrappingQuotes(semanticLinkClickMatch[1]) } };
   }
 
+  const hoverSelectorMatch = line.match(/^悬停选择器\s+(.+)$/u);
+  if (hoverSelectorMatch) {
+    return { type: 'hover', selector: stripWrappingQuotes(hoverSelectorMatch[1]) };
+  }
+
+  const hoverMatch = line.match(/^悬停\s+(.+)$/u);
+  if (hoverMatch) {
+    return { type: 'hover', text: stripWrappingQuotes(hoverMatch[1]) };
+  }
+
+  const remoteSelectAction = parseRemoteSelectAction(line);
+  if (remoteSelectAction) {
+    return remoteSelectAction;
+  }
+
+  const selectFirstAction = parseSelectFirstAction(line);
+  if (selectFirstAction) {
+    return selectFirstAction;
+  }
+
   const clickMatch = line.match(/^点击\s+(.+)$/u);
   if (clickMatch) {
     return { type: 'click', text: stripWrappingQuotes(clickMatch[1]) };
@@ -93,6 +113,11 @@ function parseAction(line: string): BrowserAction {
   const fillAction = parseFillAction(line);
   if (fillAction) {
     return fillAction;
+  }
+
+  const uploadFileAction = parseUploadFileAction(line);
+  if (uploadFileAction) {
+    return uploadFileAction;
   }
 
   const selectAction = parseSemanticSelectAction(line);
@@ -131,6 +156,109 @@ function parseAction(line: string): BrowserAction {
   }
 
   throw new VideoGeneratorError('UNSUPPORTED_SCRIPT_ACTION', `Unsupported script action: ${line}`);
+}
+
+function parseUploadFileAction(line: string): BrowserAction | undefined {
+  if (line.startsWith('上传文件选择器 ')) {
+    const rest = line.slice('上传文件选择器 '.length).trimStart();
+    const selector = readToken(rest);
+    if (selector === undefined) {
+      return undefined;
+    }
+
+    const pathToken = readToken(rest.slice(selector.length).trimStart());
+    if (pathToken === undefined) {
+      return undefined;
+    }
+
+    return { type: 'uploadFile', selector: selector.value, path: pathToken.value };
+  }
+
+  if (!line.startsWith('上传文件 ')) {
+    return undefined;
+  }
+
+  const rest = line.slice('上传文件 '.length).trimStart();
+  const target = readToken(rest);
+  if (target === undefined) {
+    return undefined;
+  }
+
+  const pathToken = readToken(rest.slice(target.length).trimStart());
+  if (pathToken === undefined) {
+    return undefined;
+  }
+
+  return { type: 'uploadFile', text: target.value, path: pathToken.value };
+}
+
+function parseRemoteSelectAction(line: string): BrowserAction | undefined {
+  if (!line.startsWith('远程选择 ')) {
+    return undefined;
+  }
+
+  const rest = line.slice('远程选择 '.length).trimStart();
+  const target = readToken(rest);
+  if (target === undefined) {
+    return undefined;
+  }
+
+  const afterTarget = rest.slice(target.length).trimStart();
+  const strategyIndex = findRemoteSelectStrategyIndex(afterTarget);
+  if (strategyIndex === undefined) {
+    return undefined;
+  }
+
+  const query = stripWrappingQuotes(afterTarget.slice(0, strategyIndex).trim());
+  const strategy = afterTarget.slice(strategyIndex).trimStart();
+  if (!query) {
+    return undefined;
+  }
+
+  if (strategy === '第一个') {
+    return { type: 'remoteSelect', text: target.value, query, selectFirst: true };
+  }
+
+  if (strategy.startsWith('选择 ')) {
+    const option = stripWrappingQuotes(strategy.slice('选择 '.length));
+    return option ? { type: 'remoteSelect', text: target.value, query, option } : undefined;
+  }
+
+  return undefined;
+}
+
+function parseSelectFirstAction(line: string): BrowserAction | undefined {
+  if (line.startsWith('选择选择器 ')) {
+    const rest = line.slice('选择选择器 '.length).trimStart();
+    const target = readToken(rest);
+    if (target === undefined || rest.slice(target.length).trim() !== '第一个') {
+      return undefined;
+    }
+
+    return { type: 'selectFirst', selector: target.value };
+  }
+
+  if (!line.startsWith('选择 ')) {
+    return undefined;
+  }
+
+  const rest = line.slice('选择 '.length).trimStart();
+  const target = readToken(rest);
+  if (target === undefined || rest.slice(target.length).trim() !== '第一个') {
+    return undefined;
+  }
+
+  return { type: 'selectFirst', text: target.value };
+}
+
+function findRemoteSelectStrategyIndex(input: string): number | undefined {
+  const firstIndex = input.lastIndexOf(' 第一个');
+  if (firstIndex >= 0 && input.slice(firstIndex).trim() === '第一个') {
+    return firstIndex;
+  }
+
+  const optionIndex = input.lastIndexOf(' 选择 ');
+  return optionIndex >= 0 ? optionIndex : undefined;
 }
 
 function parseFillAction(line: string): BrowserAction | undefined {
@@ -188,7 +316,7 @@ function parseSemanticSelectAction(line: string): BrowserAction | undefined {
   }
 
   const afterPrefix = line.slice('选择 '.length).trimStart();
-  const field = readFirstToken(afterPrefix);
+  const field = readToken(afterPrefix);
   if (!field) {
     return undefined;
   }
@@ -205,18 +333,14 @@ function parseSemanticSelectAction(line: string): BrowserAction | undefined {
   };
 }
 
-function readFirstToken(input: string): { value: string; length: number } | undefined {
-  const quotedToken = readQuotedToken(input);
-  if (quotedToken) {
-    return quotedToken;
+function readToken(input: string): { value: string; length: number } | undefined {
+  const quoted = readQuotedToken(input);
+  if (quoted !== undefined) {
+    return quoted;
   }
 
   const match = input.match(/^\S+/u);
-  if (!match) {
-    return undefined;
-  }
-
-  return { value: stripWrappingQuotes(match[0]), length: match[0].length };
+  return match === null ? undefined : { value: stripWrappingQuotes(match[0]), length: match[0].length };
 }
 
 function readQuotedToken(input: string): { value: string; length: number } | undefined {

@@ -2,7 +2,7 @@
 
 > 创建时间：2026-05-28  
 > 最后更新：2026-05-28  
-> 状态：待开始
+> 状态：P0 已完成，Phase 4-5 待开始
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -18,13 +18,13 @@
 
 | Phase | 内容 | 状态 | 备注 |
 |-------|------|------|------|
-| Phase 0 | 边界确认与当前能力盘点 | 待开始 | 不改代码，只确认现有 parser、recorder、report、CLI 和测试覆盖 |
-| Phase 1 | 录制前 preflight dry-run | 待开始 | 最高优先级，先验证动作、登录态、下拉数据、上传文件，不生成 TTS/视频 |
-| Phase 2 | 脚本三稿机制 | 待开始 | 保护原始脚本，复制润色稿和可执行稿，不擅自改业务测试数据 |
-| Phase 3 | 新动作语法与执行规则 | 待开始 | hover、remote select、选择第一个、上传文件 |
-| Phase 4 | 半自动/custom handler 保留 segment 时间轴 | 待开始 | 允许复杂动作手写 Playwright，但 timeline 仍由 recorder 记录 |
-| Phase 5 | 产物目录规范化 | 待开始 | scripts/auth/clips/audio/screenshots/reports/debug/final 分层 |
-| Phase 6 | 文档、示例和端到端验证 | 待开始 | 更新示例、交接文档、产品思考文档和 README 索引 |
+| Phase 0 | 边界确认与当前能力盘点 | 已完成 | 已确认 pipeline、preflight 复用边界和 Playwright API 支持 |
+| Phase 1 | 录制前 preflight dry-run | 已完成 | 已支持脚本解析、登录态、上传文件、浏览器动作、截图和候选报告；不生成 TTS/视频 |
+| Phase 2 | 脚本三稿机制 | 已完成 | 已支持 original/polished/executable 三稿和 manifest，原始稿冲突会失败 |
+| Phase 3 | 新动作语法与执行规则 | 已完成 | 已支持 hover、remote select、选择第一个、上传文件和 cursor overlay |
+| Phase 4 | 半自动/custom handler 保留 segment 时间轴 | 待开始 | P0 未实现，留待下一阶段 |
+| Phase 5 | 产物目录规范化 | 部分完成 | 已统一基础 run 目录和 reports；debug attempt 与完整素材迁移留待下一阶段 |
+| Phase 6 | 文档、示例和端到端验证 | 进行中 | 已更新示例 README、交接文档、产品思考文档，等待最终验证 |
 
 ## 决策日志
 
@@ -32,6 +32,8 @@
 - 2026-05-28: 原始脚本必须只读保存，润色稿和可执行稿必须复制生成。原因是昨天覆盖原始脚本、过度润色旁白、改动“测试”客户数据导致复盘失真。
 - 2026-05-28: 复杂页面先用本地 HTML fixture 做 POC 和单测，再应用到真实业务网页。原因是项目规则要求不确定交互模式不能直接在真实业务网页上试错。
 - 2026-05-28: 半自动录制必须复用 segment timeline，不允许再用固定 waitForTimeout 拼接短视频后压缩音频。原因是成片时长应由实际旁白、动作耗时和 segment buffer 自然计算。
+- 2026-05-28: P0 先交付 preflight、三稿和复杂动作语法，Phase 4 custom handler 与剩余目录规范化留到下一阶段。原因是当前最紧急风险是录制前验证、原始脚本保护和动作可执行性。
+- 2026-05-28: 失败报告必须脱敏输入值、远程选择关键字和上传文件路径。原因是真实业务录制可能包含客户名、合同文件名、本地用户目录或密码/token。
 
 ---
 
@@ -530,3 +532,5 @@
 - 当前 active 计划 `continuous-video-recording.md` 和 `semi-automatic-web-demo-recorder.md` 已显示实现完成待归档；本计划应作为后续真实业务录制可靠性改造的主计划。
 - 昨天错误成片 `video-runs/原纸贸易-订单录入-final/final.mp4` 只能作为问题样例，不应作为正式交付。
 - 后续重新录制原纸贸易订单录入时，应先运行 prepare-script，再人工确认润色稿和可执行稿，再运行 dry-run，最后才运行完整 generate。
+- P0 已完成：`--prepare-script`、`--dry-run`、hover、remote select、选择第一个、上传文件和报告脱敏均已实现并通过单元测试。
+- P0 未完成：custom handler 保留 segment 时间轴仍属 Phase 4；debug attempt 完整规范化和最终素材迁移仍属 Phase 5。

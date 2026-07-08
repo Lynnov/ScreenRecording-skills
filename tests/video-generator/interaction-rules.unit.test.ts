@@ -4,6 +4,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import {
   clickCandidate,
   fillFieldByName,
+  remoteSelect,
+  selectFirst,
   selectOptionByFieldName,
 } from '../../src/lib/video-generator/browser/interaction-rules.js';
 import type { PageSnapshotCandidate } from '../../src/lib/video-generator/browser/page-snapshot.js';
@@ -267,5 +269,242 @@ test('selectOptionByFieldName selects the option related to the matched entry sc
 
     assert.equal(await page.locator('#first-plan').getAttribute('data-value'), null);
     assert.equal(await page.locator('#second-plan').getAttribute('data-value'), 'pro');
+  });
+});
+
+
+test('remoteSelect types query into readonly Element UI style select and chooses first option', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <div class="el-select-dropdown" style="display:none"><ul></ul></div>
+      <p id="selected"></p>
+      <script>
+        const input = document.querySelector('#customer');
+        const dropdown = document.querySelector('.el-select-dropdown');
+        const list = dropdown.querySelector('ul');
+        input.addEventListener('click', () => dropdown.style.display = 'block');
+        input.addEventListener('input', () => {
+          dropdown.style.display = 'block';
+          list.innerHTML = input.value.includes('测试')
+            ? '<li class="el-select-dropdown__item">测试客户一</li><li class="el-select-dropdown__item">测试客户二</li>'
+            : '';
+          list.querySelectorAll('li').forEach((item) => item.addEventListener('click', () => {
+            input.value = item.textContent;
+            document.querySelector('#selected').textContent = item.textContent;
+          }));
+        });
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', selectFirst: true }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), '测试客户一');
+  });
+});
+
+test('remoteSelect waits for readonly select input to become editable before typing', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <div class="el-select-dropdown" style="display:none"><ul></ul></div>
+      <p id="selected"></p>
+      <script>
+        const input = document.querySelector('#customer');
+        const dropdown = document.querySelector('.el-select-dropdown');
+        const list = dropdown.querySelector('ul');
+        input.addEventListener('click', () => setTimeout(() => input.removeAttribute('readonly'), 100));
+        input.addEventListener('input', () => {
+          if (!input.value.includes('测试')) return;
+          dropdown.style.display = 'block';
+          list.innerHTML = '<li class="el-select-dropdown__item">测试客户一</li>';
+          list.querySelector('li').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+        });
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', selectFirst: true }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('remoteSelect chooses from the visible dropdown when hidden dropdowns exist first', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div class="el-select-dropdown" style="display:none"><ul><li class="el-select-dropdown__item">隐藏客户</li></ul></div>
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <div class="el-select-dropdown" style="display:none"><ul></ul></div>
+      <p id="selected"></p>
+      <script>
+        const input = document.querySelector('#customer');
+        const dropdown = document.querySelectorAll('.el-select-dropdown')[1];
+        const list = dropdown.querySelector('ul');
+        input.addEventListener('input', () => {
+          dropdown.style.display = 'block';
+          list.innerHTML = '<li class="el-select-dropdown__item">测试客户一</li>';
+          list.querySelector('li').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+        });
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', selectFirst: true }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('remoteSelect waits for the selected dropdown to close before continuing', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <div class="el-select-dropdown"><ul><li class="el-select-dropdown__item">测试客户一</li></ul></div>
+      <script>
+        document.querySelector('#customer').addEventListener('click', (event) => event.currentTarget.removeAttribute('readonly'));
+        document.querySelector('li').addEventListener('click', () => setTimeout(() => document.querySelector('.el-select-dropdown').style.display = 'none', 100));
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', selectFirst: true }, 1000);
+
+    assert.equal(await page.locator('.el-select-dropdown:visible').count(), 0);
+  });
+});
+
+test('remoteSelect ignores unrelated visible list items outside dropdown containers', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <ul><li id="unrelated">张三公司</li></ul>
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <div class="el-select-dropdown" style="display:none"><ul></ul></div>
+      <p id="selected"></p>
+      <script>
+        document.querySelector('#unrelated').addEventListener('click', () => document.querySelector('#selected').textContent = 'wrong');
+        const input = document.querySelector('#customer');
+        const dropdown = document.querySelector('.el-select-dropdown');
+        const list = dropdown.querySelector('ul');
+        input.addEventListener('input', () => {
+          dropdown.style.display = 'block';
+          list.innerHTML = '<li class="el-select-dropdown__item">张三公司</li>';
+          list.querySelector('li').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+        });
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', option: '张三公司' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('remoteSelect can choose a specified visible option by text', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <div class="el-form-item"><label>客户名称</label><div class="el-select"><input id="customer" readonly /></div></div>
+      <ul class="el-select-dropdown">
+        <li class="el-select-dropdown__item">测试客户一</li>
+        <li class="el-select-dropdown__item">张三公司</li>
+      </ul>
+      <p id="selected"></p>
+      <script>
+        document.querySelectorAll('li').forEach((item) => item.addEventListener('click', () => {
+          document.querySelector('#selected').textContent = item.textContent;
+        }));
+      </script>
+    `);
+
+    await remoteSelect(page, { text: '客户名称', query: '测试', option: '张三公司' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), '张三公司');
+  });
+});
+
+test('selectFirst retries opening a dropdown until asynchronously loaded options are available', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button id="address">收货地址</button>
+      <ul class="el-select-dropdown" style="display:none"></ul>
+      <p id="selected"></p>
+      <script>
+        const dropdown = document.querySelector('.el-select-dropdown');
+        const button = document.querySelector('#address');
+        setTimeout(() => {
+          dropdown.innerHTML = '<li class="el-select-dropdown__item">地址一</li>';
+          dropdown.querySelector('li').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+        }, 250);
+        button.addEventListener('click', () => {
+          dropdown.style.display = dropdown.children.length === 0 ? 'none' : 'block';
+        });
+      </script>
+    `);
+
+    await selectFirst(page, { selector: '#address' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('selectFirst skips visible empty poppers and chooses the visible dropdown with options', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button id="address">收货地址</button>
+      <ul class="el-select-dropdown" style="display:none">
+        <li class="el-select-dropdown__item">地址一</li>
+      </ul>
+      <div class="el-autocomplete-suggestion el-popper" style="display:block; position:fixed; left:420px; top:20px; width:100px; height:40px"></div>
+      <p id="selected"></p>
+      <script>
+        document.querySelector('#address').addEventListener('click', () => document.querySelector('.el-select-dropdown').style.display = 'block');
+        document.querySelector('.el-select-dropdown__item').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+      </script>
+    `);
+
+    await selectFirst(page, { selector: '#address' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('selectFirst ignores unrelated visible list items before opening target dropdown', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <ul><li id="unrelated">错误地址</li></ul>
+      <button id="address">收货地址</button>
+      <ul class="el-select-dropdown" style="display:none">
+        <li class="el-select-dropdown__item">地址一</li>
+      </ul>
+      <p id="selected"></p>
+      <script>
+        document.querySelector('#unrelated').addEventListener('click', () => document.querySelector('#selected').textContent = 'wrong');
+        document.querySelector('#address').addEventListener('click', () => document.querySelector('.el-select-dropdown').style.display = 'block');
+        document.querySelector('.el-select-dropdown__item').addEventListener('click', () => document.querySelector('#selected').textContent = 'right');
+      </script>
+    `);
+
+    await selectFirst(page, { selector: '#address' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), 'right');
+  });
+});
+
+test('selectFirst supports an already expanded Element UI dropdown', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button id="address">收货地址</button>
+      <ul class="el-select-dropdown">
+        <li class="el-select-dropdown__item">地址一</li>
+        <li class="el-select-dropdown__item">地址二</li>
+      </ul>
+      <p id="selected"></p>
+      <script>
+        document.querySelectorAll('li').forEach((item) => item.addEventListener('click', () => {
+          document.querySelector('#selected').textContent = item.textContent;
+        }));
+      </script>
+    `);
+
+    await selectFirst(page, { selector: '#address' }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), '地址一');
   });
 });

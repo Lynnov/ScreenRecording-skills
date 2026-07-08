@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
 import { executeBrowserAction, waitForTarget } from '../../src/lib/video-generator/browser/actions.js';
 import { basicDemoDataUrl } from '../../src/lib/video-generator/browser/demo-page.js';
@@ -98,6 +101,29 @@ test('executeBrowserAction clicks exact text and waits for text', async () => {
 
     assert.deepEqual(events, ['move:Reveal', 'click']);
     assert.equal(await page.getByText('Revealed message').count(), 1);
+  });
+});
+
+test('executeBrowserAction falls back to pointer click when a visible selector is blocked by actionability checks', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <style>
+        #start { position: fixed; left: 40px; top: 40px; width: 120px; height: 40px; background: white; }
+        #cover { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+      </style>
+      <div id="start" class="index-left-button">开启工作</div>
+      <div id="cover"></div>
+      <p id="result">pending</p>
+      <script>
+        document.querySelector('#start').addEventListener('click', () => {
+          document.querySelector('#result').textContent = 'started';
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, { type: 'click', selector: '#start' }, 1000);
+
+    assert.equal(await page.locator('#result').innerText(), 'started');
   });
 });
 
@@ -607,6 +633,155 @@ test('executeBrowserAction commits filled selector values with keyboard events a
   });
 });
 
+test('executeBrowserAction opens hover menu before clicking submenu item', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <button>开启工作</button>
+      <nav hidden>
+        <div class="menu">原纸贸易</div>
+        <button class="submenu" hidden>订单录入</button>
+      </nav>
+      <p id="result"></p>
+      <script>
+        document.querySelector('button').addEventListener('click', () => document.querySelector('nav').hidden = false);
+        document.querySelector('.menu').addEventListener('mouseenter', () => document.querySelector('.submenu').hidden = false);
+        document.querySelector('.submenu').addEventListener('click', () => document.querySelector('#result').textContent = '订单页已打开');
+      </script>
+    `);
+
+    const events: string[] = [];
+
+    await executeBrowserAction(page, { type: 'click', text: '开启工作', waitFor: { type: 'text', value: '原纸贸易' } }, 1000);
+    await executeBrowserAction(page, { type: 'hover', text: '原纸贸易', waitFor: { type: 'text', value: '订单录入' } }, 1000, recordingCursor(events));
+    await executeBrowserAction(page, { type: 'click', text: '订单录入', waitFor: { type: 'text', value: '订单页已打开' } }, 1000);
+
+    assert.deepEqual(events, ['move:原纸贸易']);
+    assert.equal(await page.locator('#result').innerText(), '订单页已打开');
+  });
+});
+
+test('executeBrowserAction supports readonly remote select first option', async () => {
+  await withPage(async (page) => {
+    await page.setContent(`
+      <label class="el-form-item">客户名称 <input id="customer" readonly /></label>
+      <ul class="el-select-dropdown" hidden></ul>
+      <p id="selected"></p>
+      <script>
+        const input = document.querySelector('#customer');
+        const dropdown = document.querySelector('.el-select-dropdown');
+        input.addEventListener('click', () => dropdown.hidden = false);
+        input.addEventListener('keydown', () => dropdown.hidden = false);
+        input.addEventListener('input', () => {
+          dropdown.hidden = false;
+          dropdown.innerHTML = input.value.includes('测试')
+            ? '<li class="el-select-dropdown__item">测试客户一</li><li class="el-select-dropdown__item">测试客户二</li>'
+            : '';
+          dropdown.querySelectorAll('li').forEach((item) => item.addEventListener('click', () => {
+            input.value = item.textContent;
+            document.querySelector('#selected').textContent = item.textContent;
+            dropdown.hidden = true;
+          }));
+        });
+      </script>
+    `);
+
+    await executeBrowserAction(page, {
+      type: 'remoteSelect',
+      text: '客户名称',
+      query: '测试',
+      selectFirst: true,
+    }, 1000);
+
+    assert.equal(await page.locator('#selected').innerText(), '测试客户一');
+  });
+});
+
+test('executeBrowserAction uploads from text button adjacent file input', async () => {
+  const outputDir = path.join(tmpdir(), `browser-actions-button-upload-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const uploadPath = path.join(outputDir, 'button contract.pdf');
+  await writeFile(uploadPath, 'demo');
+
+  try {
+    await withPage(async (page) => {
+      await page.setContent(`
+        <button type="button">合同附件</button><input id="contract" type="file" />
+        <p id="uploaded"></p>
+        <script>
+          document.querySelector('#contract').addEventListener('change', (event) => {
+            document.querySelector('#uploaded').textContent = event.target.files[0].name;
+          });
+        </script>
+      `);
+
+      await executeBrowserAction(page, { type: 'uploadFile', text: '合同附件', path: uploadPath, waitFor: { type: 'text', value: 'button contract.pdf' } }, 1000);
+
+      assert.equal(await page.locator('#uploaded').innerText(), 'button contract.pdf');
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('executeBrowserAction rejects ambiguous nearby file inputs instead of picking first', async () => {
+  const outputDir = path.join(tmpdir(), `browser-actions-ambiguous-upload-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const uploadPath = path.join(outputDir, 'ambiguous.pdf');
+  await writeFile(uploadPath, 'demo');
+
+  try {
+    await withPage(async (page) => {
+      await page.setContent(`
+        <div class="upload"><button type="button">合同附件</button><span></span><input id="wrong" type="file" /><input id="right" type="file" /></div>
+      `);
+
+      await assert.rejects(
+        () => executeBrowserAction(page, { type: 'uploadFile', text: '合同附件', path: uploadPath }, 1000),
+        (error) => error instanceof VideoGeneratorError
+          && error.code === 'NO_TARGET_FOUND'
+          && error.message.includes('Multiple file inputs'),
+      );
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('executeBrowserAction selects first address and uploads a file', async () => {
+  const outputDir = path.join(tmpdir(), `browser-actions-upload-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  const uploadPath = path.join(outputDir, 'demo contract.pdf');
+  await writeFile(uploadPath, 'demo');
+
+  try {
+    await withPage(async (page) => {
+      await page.setContent(`
+        <label>收货地址
+          <select id="address"><option value="addr-1">地址一</option><option value="addr-2">地址二</option></select>
+        </label>
+        <div class="upload-row">
+          <button type="button">合同附件</button>
+          <input id="contract" type="file" />
+        </div>
+        <p id="uploaded"></p>
+        <script>
+          document.querySelector('#contract').addEventListener('change', (event) => {
+            document.querySelector('#uploaded').textContent = event.target.files[0].name;
+          });
+        </script>
+      `);
+
+      await executeBrowserAction(page, { type: 'selectFirst', text: '收货地址' }, 1000);
+      await executeBrowserAction(page, { type: 'uploadFile', text: '合同附件', path: uploadPath, waitFor: { type: 'text', value: 'demo contract.pdf' } }, 1000);
+
+      assert.equal(await page.locator('#address').inputValue(), 'addr-1');
+      assert.equal(await page.locator('#uploaded').innerText(), 'demo contract.pdf');
+    });
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 test('waitForTarget supports selector, url, and networkIdle', async () => {
   await withPage(async (page) => {
     await page.setContent(`
@@ -725,7 +900,7 @@ test('executeBrowserAction uses specific error codes for action failures', async
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const unsupportedAction = { type: 'hover', selector: 'button' } as any;
+const unsupportedAction = { type: 'doubleClick', selector: 'button' } as any;
 
 test('executeBrowserAction reports unsupported action separately from missing action', async () => {
   await withPage(async (page) => {
@@ -735,7 +910,7 @@ test('executeBrowserAction reports unsupported action separately from missing ac
       () => executeBrowserAction(page, unsupportedAction, 100),
       (error) => error instanceof VideoGeneratorError
         && error.code === 'UNSUPPORTED_SCRIPT_ACTION'
-        && error.message.includes('Unsupported action type: hover'),
+        && error.message.includes('Unsupported action type: doubleClick'),
     );
   });
 });

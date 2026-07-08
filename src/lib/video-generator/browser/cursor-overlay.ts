@@ -171,7 +171,7 @@ export function createNoopCursorOverlayController(): CursorOverlayController {
 }
 
 export async function locatorCenter(locator: Locator, timeoutMs: number): Promise<{ x: number; y: number }> {
-  await locator.scrollIntoViewIfNeeded({ timeout: timeoutMs });
+  await locator.scrollIntoViewIfNeeded({ timeout: Math.min(timeoutMs, 1000) }).catch(() => undefined);
   const box = await locator.boundingBox({ timeout: timeoutMs });
   if (box === null) {
     throw new Error('Cannot position cursor overlay because target has no bounding box.');

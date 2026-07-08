@@ -14,6 +14,25 @@ npm run video:generate -- --script examples/video-generator/basic-demo.md --outp
 
 如果没有配置阿里云 TTS 环境变量，命令会生成清晰的失败报告，而不会联网或写入假音频冒充成功。
 
+## 录制前推荐流程
+
+真实业务录制建议先准备脚本三稿，再做 preflight dry-run，最后才生成视频。
+
+```bash
+npm run video:generate -- --script examples/video-generator/basic-demo.md --prepare-script --output video-runs/basic-demo-drafts
+npm run video:generate -- --script video-runs/basic-demo-drafts/scripts/executable.md --dry-run --output video-runs/basic-demo-preflight
+npm run video:generate -- --script video-runs/basic-demo-drafts/scripts/executable.md --output video-runs/basic-demo-final
+```
+
+三稿机制会在输出目录生成：
+
+- `scripts/original.md`：保留用户原始脚本，不允许静默覆盖。
+- `scripts/polished.md`：润色稿，用于调整旁白和节奏。
+- `scripts/executable.md`：可执行稿，用于补选择器、上传文件路径和特殊动作。
+- `scripts/script-manifest.json`：记录三稿来源和业务数据保护提示。
+
+`--prepare-script` 与 `--dry-run` 互斥。先准备三稿，确认可执行稿后，再单独运行 dry-run。
+
 ## 脚本写作规范
 
 视频脚本建议使用“操作行 + 旁白行”的交替结构，便于浏览器自动操作和 TTS 配音同时生成。
@@ -33,6 +52,28 @@ npm run video:generate -- --script examples/video-generator/basic-demo.md --outp
 - 尽量写清楚目标控件名称，例如“点击页面右下角的‘保存’按钮”。
 - 表单字段建议一项一行，避免把多个复杂动作写在同一句里。
 - 保留真实业务文案，例如菜单名、按钮名、选项名，方便自动识别页面元素。
+- 不要在未确认前替换用户提供的业务测试数据，例如客户名、地址选择策略或合同文件路径。
+
+### 新动作语法
+
+```markdown
+悬停 原纸贸易
+悬停选择器 .menu-item
+远程选择 客户名称 测试 第一个
+远程选择 客户名称 测试 选择 张三公司
+选择 收货地址 第一个
+选择选择器 .address-select 第一个
+上传文件 合同附件 fixtures/contracts/demo.pdf
+上传文件选择器 input[type="file"] fixtures/contracts/demo.pdf
+```
+
+说明：
+
+- `悬停` 用于一级菜单 hover 后出现二级菜单的场景。
+- `远程选择` 会点击控件、输入查询词、等待可见 dropdown/listbox，再选择第一项或指定选项。
+- `选择 ... 第一个` 会先打开目标控件，再选择当前可见下拉中的第一项。
+- `上传文件` 的相对路径以脚本文件所在目录为基准。
+- preflight 报告会脱敏输入值、远程选择关键字和上传文件路径；截图仍可能包含页面可见业务数据，只适合作为本地诊断产物。
 
 ### 旁白行
 

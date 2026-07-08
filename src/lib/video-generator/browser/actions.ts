@@ -1,8 +1,10 @@
 import type { Locator, Page } from 'playwright';
+
+import { redactBrowserActionInMessage } from '../action-redaction.js';
 import { VideoGeneratorError, type ActionCandidateReport, type BrowserAction, type WaitTarget } from '../types.js';
 import { matchSemanticAction } from './candidate-matcher.js';
 import { createNoopCursorOverlayController, type CursorOverlayController } from './cursor-overlay.js';
-import { clickCandidate, fillFieldByName, selectOptionByFieldName, waitAfterSemanticAction } from './interaction-rules.js';
+import { clickCandidate, fillFieldByName, remoteSelect, resolveActionTarget, selectFirst, selectOptionByFieldName, uploadFile, waitAfterSemanticAction } from './interaction-rules.js';
 import { capturePageSnapshot, type PageSnapshot } from './page-snapshot.js';
 
 export async function executeBrowserAction(
@@ -44,6 +46,13 @@ export async function executeBrowserAction(
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
       }
+      case 'hover': {
+        const locator = await resolveActionTarget(page, action, timeoutMs);
+        await cursor.moveToLocator(locator, timeoutMs);
+        await locator.hover({ timeout: timeoutMs });
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      }
       case 'fill':
         if (action.selector !== undefined) {
           await fillLocator(page.locator(action.selector), action.value, timeoutMs, cursor);
@@ -52,6 +61,14 @@ export async function executeBrowserAction(
         } else {
           throw new VideoGeneratorError('INVALID_FILL_TARGET', 'fill action requires text or selector.');
         }
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      case 'remoteSelect':
+        await remoteSelect(page, action, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
+      case 'selectFirst':
+        await selectFirst(page, action, timeoutMs);
         await waitForOptionalTarget(page, action.waitFor, timeoutMs);
         return page;
       case 'waitFor':
@@ -134,6 +151,10 @@ export async function executeBrowserAction(
           });
         }
       }
+      case 'uploadFile':
+        await uploadFile(page, action, timeoutMs);
+        await waitForOptionalTarget(page, action.waitFor, timeoutMs);
+        return page;
       default:
         throw new VideoGeneratorError(
           'UNSUPPORTED_SCRIPT_ACTION',
@@ -147,7 +168,7 @@ export async function executeBrowserAction(
 
     throw new VideoGeneratorError(
       actionErrorCode(action),
-      `Browser action failed (${describeAction(action)}): ${errorMessage(error)}`,
+      redactBrowserActionInMessage(`Browser action failed (${describeAction(action)}): ${errorMessage(error)}`),
     );
   }
 }
@@ -156,7 +177,7 @@ export async function waitForTarget(page: Page, target: WaitTarget, timeoutMs: n
   try {
     switch (target.type) {
       case 'text':
-        await page.getByText(target.value, { exact: true }).waitFor({ state: 'visible', timeout: timeoutMs });
+        await page.getByText(target.value, { exact: true }).first().waitFor({ state: 'visible', timeout: timeoutMs });
         return;
       case 'selector':
         await page.locator(target.value).waitFor({ state: 'visible', timeout: timeoutMs });
@@ -204,7 +225,34 @@ async function targetBlankHref(locator: Locator): Promise<string | undefined> {
 }
 
 async function clickLocator(locator: Locator, timeoutMs: number): Promise<void> {
-  await locator.click({ timeout: timeoutMs });
+  try {
+    await locator.click({ timeout: timeoutMs });
+  } catch (error) {
+    const box = await locator.first().boundingBox({ timeout: Math.min(timeoutMs, 1000) }).catch(() => null);
+    if (box !== null) {
+      await locator.page().mouse.click(box.x + box.width / 2, box.y + box.height / 2).catch(() => undefined);
+    }
+
+    await locator.first().evaluate((element) => {
+      const clickable = element as { click?: () => void };
+      if (typeof clickable.click === 'function') {
+        clickable.click();
+        return;
+      }
+      throw new Error('Target cannot be clicked.');
+    }, undefined, { timeout: Math.min(timeoutMs, 1000) }).catch(() => {
+      throw error;
+    });
+  }
+}
+
+async function moveMouseToLocator(locator: Locator, timeoutMs: number): Promise<void> {
+  const box = await locator.boundingBox({ timeout: timeoutMs });
+  if (box === null) {
+    return;
+  }
+
+  await locator.page().mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 async function waitForAllLocatorsHidden(locator: Locator, timeoutMs: number): Promise<void> {
@@ -357,8 +405,14 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
       return 'INVALID_GOTO_URL';
     case 'click':
       return 'INVALID_CLICK_TARGET';
+    case 'hover':
+      return 'INVALID_HOVER_TARGET';
     case 'fill':
       return 'INVALID_FILL_TARGET';
+    case 'remoteSelect':
+      return 'INVALID_REMOTE_SELECT_TARGET';
+    case 'selectFirst':
+      return 'INVALID_SELECT_FIRST_TARGET';
     case 'waitFor':
       return 'INVALID_WAIT_TARGET';
     case 'scroll':
@@ -372,6 +426,8 @@ function actionErrorCode(action: BrowserAction): VideoGeneratorError['code'] {
       return 'INVALID_CLICK_TARGET';
     case 'semanticWaitFor':
       return 'INVALID_WAIT_TARGET';
+    case 'uploadFile':
+      return 'INVALID_UPLOAD_FILE_TARGET';
   }
 }
 
@@ -381,8 +437,14 @@ function describeAction(action: BrowserAction): string {
       return `goto url=${action.url}`;
     case 'click':
       return `click ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'hover':
+      return `hover ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
     case 'fill':
       return `fill ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'remoteSelect':
+      return `remoteSelect ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
+    case 'selectFirst':
+      return `selectFirst ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`}`;
     case 'waitFor':
       return `waitFor ${describeWaitTarget(action.target)}`;
     case 'scroll':
@@ -397,6 +459,8 @@ function describeAction(action: BrowserAction): string {
       return `semanticSelect ${action.target.name} ${action.option}`;
     case 'semanticWaitFor':
       return `semanticWaitFor ${action.target.name}`;
+    case 'uploadFile':
+      return `uploadFile ${action.text !== undefined ? `text=${action.text}` : `selector=${action.selector ?? ''}`} path=[redacted]`;
   }
 }
 

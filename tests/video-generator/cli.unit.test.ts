@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { runVideoGeneratorCli } from '../../src/cli/video-generator.js';
-import type { RunReport } from '../../src/lib/video-generator/types.js';
+import type { PreflightReport, RunReport, ScriptDraftManifest } from '../../src/lib/video-generator/types.js';
 
 function makeIo() {
   const stdout: string[] = [];
@@ -75,6 +75,159 @@ test('runVideoGeneratorCli passes storage state and output args to pipeline', as
   assert.equal(exitCode, 0);
   assert.deepEqual(calls, [{ scriptPath: 'demo.md', configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' } }]);
   assert.match(stdout.join('\n'), /final\.mp4/);
+});
+
+test('runVideoGeneratorCli prepares script drafts and skips generation and preflight', async () => {
+  const { stdout, io } = makeIo();
+  const calls: Array<{ sourceScriptPath: string; outputDir: string }> = [];
+  const manifest: ScriptDraftManifest = {
+    version: 1,
+    sourceScriptPath: 'demo.md',
+    createdAt: '2026-05-28T00:00:00.000Z',
+    overwriteAllowed: false,
+    businessDataProtectionNotice: '不要覆盖原始脚本。',
+    protectedBusinessTerms: ['客户名'],
+    drafts: {
+      original: { role: 'original', path: path.join('out', 'scripts', 'original.md'), sourcePath: 'demo.md', overwriteAllowed: false },
+      polished: { role: 'polished', path: path.join('out', 'scripts', 'polished.md'), sourcePath: path.join('out', 'scripts', 'original.md'), overwriteAllowed: true },
+      executable: { role: 'executable', path: path.join('out', 'scripts', 'executable.md'), sourcePath: path.join('out', 'scripts', 'polished.md'), overwriteAllowed: true },
+    },
+    manifestPath: path.join('out', 'scripts', 'script-manifest.json'),
+  };
+
+  const exitCode = await runVideoGeneratorCli([
+    '--script',
+    'demo.md',
+    '--prepare-script',
+    '--output',
+    'out',
+  ], {
+    ...io,
+    prepareScriptDrafts: async (input) => {
+      calls.push({ sourceScriptPath: input.sourceScriptPath, outputDir: input.outputDir });
+      return manifest;
+    },
+    runPreflight: async () => {
+      throw new Error('preflight should not run');
+    },
+    runVideoGenerator: async () => {
+      throw new Error('generate should not run');
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [{ sourceScriptPath: 'demo.md', outputDir: 'out' }]);
+  assert.match(stdout.join('\n'), /Original: .*original\.md/);
+  assert.match(stdout.join('\n'), /Polished: .*polished\.md/);
+  assert.match(stdout.join('\n'), /Executable: .*executable\.md/);
+  assert.match(stdout.join('\n'), /Manifest: .*script-manifest\.json/);
+});
+
+test('runVideoGeneratorCli rejects prepare-script combined with dry-run', async () => {
+  const { stderr, io } = makeIo();
+
+  const exitCode = await runVideoGeneratorCli(['--script', 'demo.md', '--prepare-script', '--dry-run', '--output', 'out'], {
+    ...io,
+    prepareScriptDrafts: async () => {
+      throw new Error('prepare script should not run');
+    },
+    runPreflight: async () => {
+      throw new Error('preflight should not run');
+    },
+    runVideoGenerator: async () => {
+      throw new Error('generate should not run');
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr.join('\n'), /--prepare-script cannot be used with --dry-run/);
+});
+
+test('runVideoGeneratorCli exits non-zero when prepare script finds original conflict', async () => {
+  const { stderr, io } = makeIo();
+
+  const exitCode = await runVideoGeneratorCli(['--script', 'demo.md', '--prepare-script', '--output', 'out'], {
+    ...io,
+    prepareScriptDrafts: async () => {
+      throw new Error('scripts/original.md already exists with different content');
+    },
+    runVideoGenerator: async () => {
+      throw new Error('generate should not run');
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr.join('\n'), /Prepare script failed/);
+  assert.match(stderr.join('\n'), /scripts\/original\.md/);
+});
+
+test('runVideoGeneratorCli runs preflight for --dry-run and prints report path', async () => {
+  const { stdout, io } = makeIo();
+  const calls: Array<{ scriptPath: string; configOverrides?: unknown }> = [];
+
+  const exitCode = await runVideoGeneratorCli([
+    '--script',
+    'demo.md',
+    '--dry-run',
+    '--output',
+    'out',
+    '--storage-state',
+    'auth/state.json',
+  ], {
+    ...io,
+    runPreflight: async (input) => {
+      calls.push({ scriptPath: input.scriptPath, configOverrides: input.configOverrides });
+      return {
+        ok: true,
+        outputDir: 'out',
+        scriptPath: input.scriptPath,
+        storageStatePath: 'auth/state.json',
+        checks: [],
+        preflightReportPath: path.join('out', 'reports', 'preflight-report.json'),
+      } satisfies PreflightReport;
+    },
+    runVideoGenerator: async () => {
+      throw new Error('generate should not run');
+    },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(calls, [{ scriptPath: 'demo.md', configOverrides: { outputDir: 'out', storageStatePath: 'auth/state.json' } }]);
+  assert.match(stdout.join('\n'), /Preflight passed:/);
+  assert.match(stdout.join('\n'), /preflight-report\.json/);
+});
+
+test('runVideoGeneratorCli reports preflight failures with report path', async () => {
+  const { stderr, io } = makeIo();
+
+  const exitCode = await runVideoGeneratorCli(['--script', 'demo.md', '--dry-run'], {
+    ...io,
+    runPreflight: async (input) => ({
+      ok: false,
+      outputDir: 'out',
+      scriptPath: input.scriptPath,
+      checks: [{ name: 'browser.action', status: 'failed', message: 'Missing button', segmentId: 'seg-001', actionIndex: 0 }],
+      failedSegmentId: 'seg-001',
+      failedAction: { type: 'click', text: '开始' },
+      preflightReportPath: path.join('out', 'reports', 'preflight-report.json'),
+    }),
+  });
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr.join('\n'), /Preflight failed/);
+  assert.match(stderr.join('\n'), /seg-001/);
+  assert.match(stderr.join('\n'), /Action: click/);
+  assert.match(stderr.join('\n'), /preflight-report\.json/);
+});
+
+test('runVideoGeneratorCli usage includes dry-run and prepare-script examples', async () => {
+  const { stderr, io } = makeIo();
+
+  const exitCode = await runVideoGeneratorCli([], io);
+
+  assert.equal(exitCode, 1);
+  assert.match(stderr.join('\n'), /--dry-run/);
+  assert.match(stderr.join('\n'), /--prepare-script/);
 });
 
 test('runVideoGeneratorCli rejects missing flag values without treating flags as values', async () => {

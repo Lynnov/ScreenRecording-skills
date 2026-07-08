@@ -12,3 +12,5 @@
 | 非实时语音合成CosyVoice HTTP API参考.md | DashScope CosyVoice 非实时语音合成 HTTP API 参考，用于阿里云 TTS provider 实现 |
 | video-generator-product-batch-price-adjustment-retrospective-2026-05-22.md | 产品批量调价视频生成调试复盘：前景层定位、默认选项演示、下拉选择器、真实生成验证 |
 | video-generator-rawpaper-order-entry-retrospective-2026-05-27.md | 原纸贸易订单录入录制复盘：时间轴错位、手动录制、Element UI remote select、合同上传阻塞和后续优化 |
+| video-generator-rawpaper-order-entry-retrospective-2026-05-29.md | 原纸贸易订单录入录制复盘：直达页录制、选择器收敛、远程下拉稳定性和正式生成经验 |
+| video-generator-recording-checklist-2026-05-29.md | 真实业务视频录制检查清单：三稿、登录态、选择器、dry-run、正式生成和验收 |

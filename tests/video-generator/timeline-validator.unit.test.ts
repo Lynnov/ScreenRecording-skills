@@ -26,7 +26,11 @@ test('core timeline types support planned wait targets action waitFor fields ass
   const actions: BrowserAction[] = [
     { type: 'goto', url: 'https://example.com', waitFor: networkIdleTarget },
     { type: 'click', text: '登录', waitFor: { type: 'text', value: '欢迎' } },
+    { type: 'hover', text: '原纸贸易', waitFor: { type: 'text', value: '订单录入' } },
     { type: 'fill', selector: '#name', value: 'alice', waitFor: { type: 'selector', value: '#ok' } },
+    { type: 'remoteSelect', text: '客户名称', query: '测试', selectFirst: true },
+    { type: 'selectFirst', text: '收货地址' },
+    { type: 'uploadFile', selector: 'input[type=file]', path: 'fixtures/contracts/demo.pdf' },
     { type: 'waitFor', target: networkIdleTarget },
     { type: 'scroll', y: 300, waitFor: networkIdleTarget },
   ];
@@ -105,11 +109,16 @@ test('validateTimeline rejects invalid segment narration and browser actions wit
     ['EMPTY_ACTIONS', { actions: [] }],
     ['INVALID_GOTO_URL', { actions: [{ type: 'goto', url: 'ftp://example.com' }] }],
     ['INVALID_CLICK_TARGET', { actions: [{ type: 'click' }] }],
+    ['INVALID_HOVER_TARGET', { actions: [{ type: 'hover' }] }],
     ['INVALID_FILL_TARGET', { actions: [{ type: 'fill', value: 'abc' }] }],
     ['INVALID_FILL_VALUE', { actions: [{ type: 'fill', text: '搜索', value: '' }] }],
+    ['INVALID_REMOTE_SELECT_TARGET', { actions: [{ type: 'remoteSelect', text: '客户名称', query: '测试' }] }],
+    ['INVALID_REMOTE_SELECT_TARGET', { actions: [{ type: 'remoteSelect', text: '客户名称', query: '', selectFirst: true }] }],
+    ['INVALID_SELECT_FIRST_TARGET', { actions: [{ type: 'selectFirst' }] }],
+    ['INVALID_UPLOAD_FILE_TARGET', { actions: [{ type: 'uploadFile', text: '合同附件', path: '' }] }],
     ['INVALID_WAIT_TARGET', { actions: [{ type: 'waitFor' } as BrowserAction] }],
     ['INVALID_SCROLL_Y', { actions: [{ type: 'scroll', y: Number.POSITIVE_INFINITY }] }],
-    ['UNSUPPORTED_SCRIPT_ACTION', { actions: [{ type: 'hover' } as unknown as BrowserAction] }],
+    ['UNSUPPORTED_SCRIPT_ACTION', { actions: [{ type: 'doubleClick' } as unknown as BrowserAction] }],
   ];
 
   for (const [code, segmentPatch] of cases) {
@@ -153,6 +162,9 @@ test('validateTimeline accepts valid wait target shapes on waitFor and optional 
     { type: 'goto', url: 'https://example.com', waitFor: { type: 'networkIdle' } },
     { type: 'click', text: '继续', waitFor: { type: 'text', value: '完成' } },
     { type: 'fill', selector: '#email', value: 'a@example.com', waitFor: { type: 'selector', value: '#ok' } },
+    { type: 'remoteSelect', text: '客户名称', query: '测试', option: '张三公司', waitFor: { type: 'selector', value: '#ok' } },
+    { type: 'selectFirst', text: '收货地址', waitFor: { type: 'selector', value: '#ok' } },
+    { type: 'uploadFile', selector: 'input[type=file]', path: 'fixtures/contracts/demo.pdf', waitFor: { type: 'selector', value: '#ok' } },
     { type: 'scroll', y: 120, waitFor: { type: 'url', value: 'https://example.com/done' } },
     { type: 'scrollTo', target: { type: 'selector', value: '.card' }, waitFor: { type: 'text', value: '完成' } },
     { type: 'waitFor', target: { type: 'networkIdle' } },
