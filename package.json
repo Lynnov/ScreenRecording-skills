@@ -10,6 +10,11 @@
     "test:video-poc": "tsx --test tests/video-generator/playwright-video-poc.test.ts",
     "test": "npm run typecheck && npm run test:unit",
     "build:manual-poc": "tsc -p tsconfig.electron-poc.json && node scripts/copy-manual-poc-assets.mjs",
+    "poc:manual-capture": "npm run build:manual-poc && electron dist/manual-recording-poc/pocs/manual-recording/capture-main.js",
+    "test:manual-capture-poc": "node scripts/verify-manual-poc.mjs capture",
+    "test:manual-clock-poc": "node scripts/verify-manual-poc.mjs clock",
+    "test:manual-events-poc": "node scripts/verify-manual-poc.mjs events",
+    "test:editing-poc": "tsx --test tests/video-generator/editing-preview-poc.test.ts",
     "video:generate": "tsx src/cli/video-generator.ts",
     "video:doctor": "tsx src/cli/video-doctor.ts",
     "video:tts-smoke": "tsx src/cli/video-generator.ts --tts-smoke"

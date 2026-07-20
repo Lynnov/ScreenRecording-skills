@@ -932,7 +932,7 @@ git commit -m "feat: add Electron window capture provider"
 - Test: `tests/video-generator/manual-capture-cli.unit.test.ts`
 - Test: `tests/video-generator/manual-poc-report.unit.test.ts`
 
-- [ ] **Step 1: 实现专用 Chromium 启动和绑定页**
+- [x] **Step 1: 实现专用 Chromium 启动和绑定页**
 
 `recording/session.ts` 导出 `launchManualChromiumSession()`，行为固定为：
 
@@ -947,7 +947,7 @@ await page.waitForFunction((title) => document.title === title, bindingTitle);
 
 Electron 每 250ms 重新枚举 window sources，最多等待 10 秒；精确命中一个 title 后绑定，零个继续等待，多个立即报告冲突。绑定后由 session 根据 `--fixture` 导航到编译输出中的 `capture-fixture.html`、`clock-fixture.html` 或 `event-fixture.html`。模块不得导入或调用 `executeBrowserAction`。
 
-- [ ] **Step 2: 实现 POC main 进程参数**
+- [x] **Step 2: 实现 POC main 进程参数**
 
 在 `package.json` 此时再添加：
 
@@ -977,14 +977,14 @@ Electron 每 250ms 重新枚举 window sources，最多等待 10 秒；精确命
 
 未知参数、缺少值、duration 非正整数时打印用法并以 2 退出；`--help` 以 0 退出；非 Windows 以 3 退出；source 未绑定以 4 退出；capture/ffmpeg 失败以 5 退出。`--duration-seconds` 是无人值守兜底上限，不是硬切点：计时到期时与第一次 F10 相同，只进入 5 秒 `recording-stop-requested` 确认窗口；操作员第二次 F10/按钮确认优先。5 秒后无人确认则为了 POC 可恢复性自动停止，并追加 `recording-stop-timeout-confirmed`。`--output` 立即解析为绝对路径并调用 `assertManualRunIsWritable()`。所有退出路径在 `finally` 中执行 `globalShortcut.unregisterAll()`、清理 display media handler、关闭 event log、恢复 borderless window、关闭 BrowserContext/BrowserWindow。
 
-- [ ] **Step 3: 写 CLI 解析和清理测试**
+- [x] **Step 3: 写 CLI 解析和清理测试**
 
 `manual-capture-cli.unit.test.ts` 注入假的 Electron/Browser/Capture deps，覆盖 `--help`、未知参数、缺值、duration=0、非 win32、source 未找到、capture 失败，并断言每个退出路径都调用 `unregisterAll`、handler reset、browser close 和 window restore。
 
 Run: `npx tsx --test tests/video-generator/manual-capture-cli.unit.test.ts`  
 Expected: 首次 FAIL，`capture-main.ts` 尚未导出可测试的 `parseManualPocArgs()` / `runManualCapturePoc()`。
 
-- [ ] **Step 4: 实现最小置顶悬浮窗**
+- [x] **Step 4: 实现最小置顶悬浮窗**
 
 BrowserWindow 配置：
 
@@ -1006,7 +1006,7 @@ new BrowserWindow({
 
 首次 `ready-to-show` 使用 `showInactive()`；按钮需要操作时暂时设 `focusable: true`，操作后立即把焦点还给 Chromium，并恢复 `focusable: false`。POC 报告记录 `overlayAlwaysOnTop`、`overlayEnteredCapture` 的人工结论。该窗口只是最小测试控制窗，不实现正式悬浮窗的 Segment、Action、置信度或 Agent UI。
 
-- [ ] **Step 5: 定义并原子写 capture POC report**
+- [x] **Step 5: 定义并原子写 capture POC report**
 
 `recording/poc-report.ts` 定义：
 
@@ -1051,7 +1051,7 @@ export async function writeCapturePocReport(
 
 两个 writer 调用同一个 `writeJsonAtomically(filePath, value)`，写 `${filePath}.tmp` 后 rename。capture main 在停止并完成 normalize/ffprobe/抽帧后等待控制窗提交 checklist；没有 checklist 时仍写 report，但 `status='incomplete'`。规范化成功时 report 使用 `video.status='available'`；失败时用 `video.status='unavailable'` 和 stderr 摘要，不伪造媒体字段。程序自动填 video/scale/mode/status/errors，并把 ffprobe 原始 stdout 原子写到 `captureFfprobeJsonPath`。结束时用 ffmpeg 在首帧、中点、末帧和每次 tab switch 的 `videoTimeMs` 抽 PNG 到 `captureEvidenceFramesDir`；抽帧命令和路径写入 report。`overlayEnteredCapture` 和 `multiTabContinuous` 由操作员在控制窗查看这些证据后勾选，原子写入 `captureOperatorChecklistPath`；report 只引用该证据，不自行声称通过。writer 使用 `.tmp` + rename，并有 `manual-poc-report.unit.test.ts` 覆盖成功、失败、证据文件缺失和未填写人工结论时 `status='incomplete'`。
 
-- [ ] **Step 6: 写独立 POC 测试包装器**
+- [x] **Step 6: 写独立 POC 测试包装器**
 
 `manual-window-capture-poc.test.ts` 只在显式命令下运行：
 
