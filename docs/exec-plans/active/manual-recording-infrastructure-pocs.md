@@ -578,7 +578,7 @@ git commit -m "feat: add manual recording artifacts"
 - Test: `tests/video-generator/capture-source-matcher.unit.test.ts`
 - Test: `tests/video-generator/windows-window-mode.unit.test.ts`
 
-- [ ] **Step 1: 写 source 匹配失败测试**
+- [x] **Step 1: 写 source 匹配失败测试**
 
 ```ts
 import assert from 'node:assert/strict';
@@ -601,12 +601,12 @@ test('returns the only exact title match', () => {
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npx tsx --test tests/video-generator/capture-source-matcher.unit.test.ts`  
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现 capture provider 边界和精确匹配**
+- [x] **Step 3: 实现 capture provider 边界和精确匹配**
 
 `capture/types.ts`：
 
@@ -643,7 +643,7 @@ export function parseWindowsHandle(sourceId: string): bigint {
 }
 ```
 
-- [ ] **Step 4: 写 Windows window mode 参数测试**
+- [x] **Step 4: 写 Windows window mode 参数测试**
 
 测试只验证 PowerShell 参数和 handle，不真实修改窗口：
 
@@ -669,7 +669,7 @@ test('builds encoded PowerShell commands with a restorable snapshot', () => {
 });
 ```
 
-- [ ] **Step 5: 实现 Windows helper**
+- [x] **Step 5: 实现 Windows helper**
 
 `windows-window-mode.ts` 提供：
 
@@ -690,7 +690,7 @@ export function buildRestoreWindowCommand(handle: bigint, snapshot: WindowModeSn
 
 `enableBorderlessWindowMode()` 在调用 PowerShell 前通过 `GetWindowLongPtr` 与 `GetWindowRect` 读取原始 style/bounds，保存为 `{ style: bigint, bounds: { left, top, right, bottom } }`；`restoreBorderlessWindowMode()` 把该 snapshot 传入恢复脚本，依次调用 `SetWindowLongPtr`、`SetWindowPos(..., SWP_FRAMECHANGED)` 和 `ShowWindow(SW_RESTORE)`。进程退出钩子若恢复调用失败，报告必须写 `windowModeRestoreRequired: true`、source handle 和原始 snapshot。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 Run:
 
