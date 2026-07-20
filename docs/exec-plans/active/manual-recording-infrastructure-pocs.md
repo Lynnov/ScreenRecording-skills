@@ -21,7 +21,7 @@
 | Phase 0 | POC 公共依赖、构建边界和素材目录 | 待开始 | Electron 可构建；manual POC 目录可创建 |
 | POC 1 | Windows 指定 Chromium 窗口捕获 | 待开始 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
 | POC 2 | 视频、页面事件和用户标记统一时钟 | 待开始 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
-| POC 3 | 页面事件采集和虚拟鼠标 | 待开始 | 事件日志 + 多标签页/刷新重新注入验证报告 |
+| POC 3 | 页面事件采集和虚拟鼠标 | 待开始 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
 | POC 4 | 原始录像 + Segment 补录多源预览 | 待开始 | `edit/preview-timeline.json` + `edit/preview.mp4` |
 | Phase 5 | 全量回归、POC 结果文档和归档决策 | 待开始 | `docs/research/manual-recording-infrastructure-poc-results.md` |
 
@@ -474,6 +474,7 @@ export interface ManualRunArtifacts {
   captureOperatorChecklistPath: string;
   captureFfprobeJsonPath: string;
   captureEvidenceFramesDir: string;
+  manualEventsPocReportPath: string;
   pickupPath(segmentId: string, attempt: number): string;
 }
 
@@ -499,6 +500,7 @@ export function createManualRunArtifacts(outputDir: string): ManualRunArtifacts 
     captureOperatorChecklistPath: path.join(reportsDir, 'capture-poc-operator-checklist.json'),
     captureFfprobeJsonPath: path.join(reportsDir, 'capture-poc-ffprobe.json'),
     captureEvidenceFramesDir: path.join(reportsDir, 'capture-poc-frames'),
+    manualEventsPocReportPath: path.join(reportsDir, 'manual-events-poc-report.json'),
     pickupPath: (segmentId, attempt) => path.join(pickupsDir, `${segmentId}-attempt-${String(attempt).padStart(3, '0')}.mp4`),
   };
 }
@@ -796,7 +798,6 @@ export async function normalizeCapturedVideo(input: {
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('manualCapture', {
-  prepareStream: () => ipcRenderer.invoke('capture:prepare-stream'),
   appendChunk: (bytes: Uint8Array, sequence: number, timecode: number) => ipcRenderer.invoke('capture:append-chunk', bytes, sequence, timecode),
   markFirstChunk: (sequence: 0, timecode: number) => ipcRenderer.invoke('capture:first-chunk', sequence, timecode),
   flush: (lastSequence: number) => ipcRenderer.invoke('capture:flush', lastSequence),
@@ -805,14 +806,14 @@ contextBridge.exposeInMainWorld('manualCapture', {
 });
 ```
 
-只暴露上述六个受限方法，不暴露 `ipcRenderer`、`fs` 或 `child_process`。同时创建 `pocs/manual-recording/capture-renderer.d.ts`，声明 `window.manualCapture` 的五个方法（`prepareStream`、`appendChunk`、`markFirstChunk`、`flush`、`stop`、`submitChecklist`）和返回类型，确保 renderer 在 `nodeIntegration: false` 下不依赖 Node `Buffer`。
+只暴露上述五个受限方法，不暴露 `ipcRenderer`、`fs` 或 `child_process`。同时创建 `pocs/manual-recording/capture-renderer.d.ts`，声明 `window.manualCapture` 的五个方法（`appendChunk`、`markFirstChunk`、`flush`、`stop`、`submitChecklist`）和返回类型，确保 renderer 在 `nodeIntegration: false` 下不依赖 Node `Buffer`。
 
 - [ ] **Step 5: 实现 renderer 捕获状态机**
 
 `capture-renderer.ts` 的关键顺序必须固定：
 
 ```ts
-await window.manualCapture.prepareStream();
+// 该调用必须是 #start 的 click listener 中第一个 await；调用前不得经过 IPC。
 const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
 const video = document.createElement('video');
 video.muted = true;
@@ -848,8 +849,8 @@ recorder.start(250);
 2. 用 `desktopCapturer.getSources({ types: ['window'], fetchWindowIcons: false })` 获取 source。
 3. 用 `matchUniqueWindowSource` 精确绑定标题。
 4. 在 renderer 请求 display media 前注册 `setDisplayMediaRequestHandler`。
-5. `ipcMain.handle('capture:submit-checklist')` 只接受 control sender，验证两个 boolean 和 notes string 后调用 `writeCaptureOperatorChecklist()`；renderer 在 capture stop 完成后显示 checklist fieldset 并提交。
-6. `ipcMain.handle('capture:prepare-stream')` 只接受 control window 的 `event.sender.id`，确认 source 已绑定后返回 `{ ready: true }`；未绑定或错误 sender 抛出明确错误。随后 renderer 调用 `getDisplayMedia()`。
+5. source 必须在显示/启用开始按钮之前完成绑定，display media handler 也必须预先注册；`#start` 只有收到 main 的 `capture-ready` IPC 事件后才解除 disabled。
+6. `ipcMain.handle('capture:submit-checklist')` 只接受 control sender，验证两个 boolean 和 notes string 后调用 `writeCaptureOperatorChecklist()`；renderer 在 capture stop 完成后显示 checklist fieldset 并提交。
 7. `capture:first-chunk` 只接受 sequence 0 对应的首次通知，并在 main clock 上设置 video time origin；重复通知拒绝。
 8. display media handler 只允许 control window 的主 frame：在注册时缓存 `controlWindow.webContents.mainFrame.routingId`；handler 中 `request.frame === null`、`request.frame.isDestroyed()`、`request.frame.routingId !== cachedMainFrameRoutingId` 或 `webContents.fromFrame(request.frame)?.id !== controlWindow.webContents.id` 时执行 `callback({})`。整个来源解析包在 `try/catch` 中，detached/destroyed frame 一律拒绝；正确来源执行 `callback({ video: matchedDesktopCapturerSource })`。停止后用 `setDisplayMediaRequestHandler(null)` 清理。
 9. `capture:append-chunk` 验证 sequence 从 0 连续递增，使用同一个串行 Promise queue 执行 `appendFile(rawVideoPath, bytes)`，不得在内存聚合整条录像。
@@ -864,7 +865,8 @@ recorder.start(250);
 
 ```text
 submit-checklist 验证 sender/payload 并写 checklist
-prepare-stream 对 control sender 返回 ready，对其他 sender 拒绝
+capture-ready 仅在 source 绑定和 display handler 注册完成后发送；start 按钮此前 disabled
+start click 的第一个 await 是 getDisplayMedia，不经过 IPC
 first-chunk 只接受一次并建立 video origin
 唯一 source 被 callback({video: source}) 授权
 request.frame=null、已销毁/detached frame、control child frame、非 control webContents 请求均 callback({})
@@ -1207,7 +1209,7 @@ globalShortcut.register('F9', () => session.recordUserMarker('retry-start'));
 globalShortcut.register('F10', () => session.requestStopConfirmation());
 ```
 
-`recordUserMarker()` 只能调用 `clock.stamp()`，不能调用 `Date.now()` 或 renderer 的 `performance.now()`。第一次 F10 追加 `recording-stop-requested` 并在 POC 控制窗显示确认；5 秒内再次按 F10 才追加 `recording-stop` 并停止。人工 F10 请求超时后回到 recording；只有 `--duration-seconds` 兜底上限触发的请求在 5 秒无人响应后自动停止并追加 `recording-stop-timeout-confirmed`。F8/Shift+F8 的 Action 指针语义不属于这四个基础 POC，不在本任务注册。
+`getDisplayMedia()` 已在操作员点击控制窗“开始捕获”时完成；F7 只标记正式素材区间，不负责创建 display stream，因此全局快捷键不需要 renderer transient activation。`recordUserMarker()` 只能调用 `clock.stamp()`，不能调用 `Date.now()` 或 renderer 的 `performance.now()`。第一次 F10 追加 `recording-stop-requested` 并在 POC 控制窗显示确认；5 秒内再次按 F10 才追加 `recording-stop` 并停止。人工 F10 请求超时后回到 recording；只有 `--duration-seconds` 兜底上限触发的请求在 5 秒无人响应后自动停止并追加 `recording-stop-timeout-confirmed`。F8/Shift+F8 的 Action 指针语义不属于这四个基础 POC，不在本任务注册。
 
 - [ ] **Step 5: 运行测试**
 
@@ -1661,8 +1663,11 @@ git commit -m "feat: add manual cursor overlay"
 
 **Files:**
 - Create: `pocs/manual-recording/event-fixture.html`
+- Create: `src/lib/video-generator/recording/events-poc-report.ts`
 - Test: `tests/video-generator/manual-events-poc.test.ts`
+- Test: `tests/video-generator/manual-events-poc-report.unit.test.ts`
 - Modify: `src/lib/video-generator/browser/tab-observer.ts`
+- Modify: `src/lib/video-generator/recording/artifacts.ts`
 - Modify: `src/lib/video-generator/recording/session.ts`
 
 - [ ] **Step 1: 创建综合 fixture**
@@ -1685,7 +1690,31 @@ const tabs = await installTabObserver(context, appendTabEvent);
 
 任何页面监听失败只追加 `observer-error`，不得停止 capture；报告 `eventCaptureComplete: false`。
 
-- [ ] **Step 4: 写综合 POC 断言**
+- [ ] **Step 4: 定义事件 POC 报告**
+
+`events-poc-report.ts` 定义并原子写：
+
+```ts
+export interface ManualEventsPocReport {
+  version: 1;
+  status: 'passed' | 'failed' | 'incomplete';
+  eventsPath: string;
+  tabsPath: string;
+  eventCaptureComplete: boolean;
+  counts: Record<'pointer-click' | 'input' | 'change' | 'scroll' | 'navigation' | 'tab-created' | 'tab-activated' | 'tab-closed' | 'observer-error', number>;
+  reloadReinjectionPassed: boolean;
+  newTabReinjectionPassed: boolean;
+  childFrameReinjectionPassed: boolean;
+  dynamicDomPassed: boolean;
+  cursorDidNotBlockInteraction: boolean;
+  errors: string[];
+}
+export async function writeManualEventsPocReport(filePath: string, report: ManualEventsPocReport): Promise<void>;
+```
+
+`manual-events-poc-report.unit.test.ts` 覆盖完整通过、observer-error 导致 incomplete、缺少任一必需事件导致 failed，以及 `.tmp` + rename。
+
+- [ ] **Step 5: 写综合 POC 断言**
 
 `manual-events-poc.test.ts` 读取 JSONL 并断言：
 
@@ -1705,7 +1734,7 @@ same-origin iframe 事件带 isMainFrame=false 和 frameUrl
 第一帧后的事件均有 videoTimeMs
 ```
 
-- [ ] **Step 5: 运行 POC 3**
+- [ ] **Step 6: 运行 POC 3**
 
 Run:
 
@@ -1714,9 +1743,9 @@ npm run poc:manual-capture -- --output "video-runs/manual-events-poc" --display-
 npm run test:manual-events-poc
 ```
 
-人工执行 fixture 中所有控件并手动切换 tab；不得由程序自动切 tab。
+人工执行 fixture 中所有控件并手动切换 tab；不得由程序自动切 tab。session 结束时根据事件、tabs snapshot 和 overlay 测试结果写 `reports/manual-events-poc-report.json`；验证 wrapper 同时读取 JSONL 和该报告，要求 `status='passed'`。
 
-- [ ] **Step 6: POC 3 独立验收门槛**
+- [ ] **Step 7: POC 3 独立验收门槛**
 
 ```text
 pointer-click/input/change/scroll/navigation/tab-created/tab-activated/tab-closed 八类事件全部出现
@@ -1728,10 +1757,10 @@ JSONL 异常中止后除最后一条可能未完整写入的行外，前序完�
 源码无 actions.ts/interaction-rules.ts 依赖
 ```
 
-- [ ] **Step 7: 提交 POC 3**
+- [ ] **Step 8: 提交 POC 3**
 
 ```bash
-git add pocs/manual-recording/event-fixture.html src/lib/video-generator/browser/tab-observer.ts src/lib/video-generator/recording/session.ts tests/video-generator/manual-events-poc.test.ts tests/video-generator/tab-observer.unit.test.ts
+git add pocs/manual-recording/event-fixture.html src/lib/video-generator/browser/tab-observer.ts src/lib/video-generator/recording/artifacts.ts src/lib/video-generator/recording/events-poc-report.ts src/lib/video-generator/recording/session.ts tests/video-generator/manual-events-poc.test.ts tests/video-generator/manual-events-poc-report.unit.test.ts tests/video-generator/tab-observer.unit.test.ts
 git commit -m "test: validate manual event observation"
 ```
 
@@ -1882,10 +1911,10 @@ concat=n=3:v=1:a=0
 每条 clip 的完整链固定为：
 
 ```text
-[input:v]trim=start=S:end=E,setpts=(PTS-STARTPTS)/RATE,settb=AVTB,fps=30,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1,format=yuv420p[clipN]
+[input:v]trim=start=S:end=E,setpts=(PTS-STARTPTS)/<playbackRateNumericLiteral>,settb=AVTB,fps=30,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1,format=yuv420p[clipN]
 ```
 
-`short-fade` 不增加额外黑帧：它把当前 Segment 已有的最后 120ms 逐渐变黑，并把下一 Segment 已有的前 120ms 从黑变亮，因此总时长仍是 clip duration + hold；每段时长必须大于 120ms。
+builder 必须把每个 `clip.playbackRate` 格式化成数值字面量（例如 `2`、`1.5`）后插入表达式；`RATE` 不是 ffmpeg `setpts` 常量，禁止原样输出占位符。`short-fade` 不增加额外黑帧：它把当前 Segment 已有的最后 120ms 逐渐变黑，并把下一 Segment 已有的前 120ms 从黑变亮，因此总时长仍是 clip duration + hold；每段时长必须大于 120ms。
 
 - [ ] **Step 4: 实现纯 filtergraph builder**
 
