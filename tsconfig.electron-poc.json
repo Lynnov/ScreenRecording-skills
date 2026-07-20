@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "noEmit": false,
+    "outDir": "dist/manual-recording-poc",
+    "rootDir": ".",
+    "skipLibCheck": false
+  },
+  "include": [
+    "pocs/manual-recording/**/*.ts",
+    "pocs/manual-recording/**/*.cts",
+    "src/lib/video-generator/capture/**/*.ts",
+    "src/lib/video-generator/recording/**/*.ts",
+    "src/lib/video-generator/editing/**/*.ts"
+  ]
+}
