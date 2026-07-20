@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseManualPocArgs, runManualCapturePoc } from '../../pocs/manual-recording/capture-main.js';
+import { parseManualPocArgs, runManualCapturePoc, shouldRunManualCaptureEntrypoint } from '../../pocs/manual-recording/capture-main.js';
 
 test('parses manual capture POC arguments', () => {
   assert.deepEqual(parseManualPocArgs(['--help']), { help: true });
@@ -21,6 +21,24 @@ test('parses manual capture POC arguments', () => {
   assert.throws(() => parseManualPocArgs(['--duration-seconds', '0']), /positive integer/i);
   assert.throws(() => parseManualPocArgs(['--display-mode', 'screen']), /display-mode/i);
   assert.throws(() => parseManualPocArgs(['--fixture', 'popup']), /fixture/i);
+});
+
+test('detects Electron main execution even when argv[1] is not the module path', () => {
+  assert.equal(shouldRunManualCaptureEntrypoint({
+    argv1: 'E:/Code/ScreenRecording/node_modules/electron/dist/electron.exe',
+    modulePath: 'E:/Code/ScreenRecording/dist/manual-recording-poc/pocs/manual-recording/capture-main.js',
+    isElectronMain: true,
+  }), true);
+  assert.equal(shouldRunManualCaptureEntrypoint({
+    argv1: 'E:/Code/ScreenRecording/dist/manual-recording-poc/pocs/manual-recording/capture-main.js',
+    modulePath: 'E:/Code/ScreenRecording/dist/manual-recording-poc/pocs/manual-recording/capture-main.js',
+    isElectronMain: false,
+  }), true);
+  assert.equal(shouldRunManualCaptureEntrypoint({
+    argv1: 'E:/Code/ScreenRecording/tests/video-generator/manual-capture-cli.unit.test.ts',
+    modulePath: 'E:/Code/ScreenRecording/dist/manual-recording-poc/pocs/manual-recording/capture-main.js',
+    isElectronMain: false,
+  }), false);
 });
 
 test('runs cleanup hooks for help, platform failure, source failure, and capture failure', async () => {

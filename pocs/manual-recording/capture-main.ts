@@ -95,6 +95,14 @@ export function parseManualPocArgs(argv: string[]): ManualPocArgs {
   return result;
 }
 
+export function shouldRunManualCaptureEntrypoint(input: {
+  argv1: string | undefined;
+  modulePath: string;
+  isElectronMain: boolean;
+}): boolean {
+  return input.isElectronMain || input.argv1 === input.modulePath;
+}
+
 export async function runManualCapturePoc(argv: string[], deps: ManualCapturePocDeps = {}): Promise<ManualCapturePocResult> {
   const cleanup = deps.cleanup ?? asyncNoop;
   try {
@@ -385,9 +393,19 @@ function delay(milliseconds: number): Promise<void> {
 
 async function asyncNoop(): Promise<void> {}
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const deps = await createRealManualCaptureDeps();
-  const result = await runManualCapturePoc(process.argv.slice(2), deps);
+if (shouldRunManualCaptureEntrypoint({ argv1: process.argv[1], modulePath: fileURLToPath(import.meta.url), isElectronMain: process.versions.electron !== undefined })) {
+  let result: ManualCapturePocResult;
+  try {
+    const parsed = parseManualPocArgs(process.argv.slice(2));
+    if (parsed.help) {
+      result = await runManualCapturePoc(['--help']);
+    } else {
+      const deps = await createRealManualCaptureDeps();
+      result = await runManualCapturePoc(process.argv.slice(2), deps);
+    }
+  } catch (error) {
+    result = { exitCode: 2, message: `${formatError(error)}\n${USAGE}` };
+  }
   if (result.message) {
     const output = result.exitCode === 0 ? console.log : console.error;
     output(result.message);
