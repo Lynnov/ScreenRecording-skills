@@ -12,6 +12,31 @@
 
 **Tech Stack:** TypeScript ESM、Node.js >=22.12.0、Playwright（`package-lock.json` 当前解析为 1.60.0）、Electron 43.1.1、Chromium、MediaRecorder、ffmpeg/ffprobe、`node:test` + `tsx`、Windows 10/11。
 
+## Agent 执行索引
+
+本计划已经包含当前第一阶段 POC 从设计文档中需要开放的约束。执行时以本文件为准，`docs/research/manual-recording-agent-editing-design.md` 只作为产品/架构背景，不需要每轮重复读取。
+
+为减少上下文和 token 浪费，agentic worker 不应整份计划反复加载。每轮只读取：
+
+1. 本文件开头的 `Goal`、`Architecture`、`Tech Stack`、`第一份计划的明确范围` 和 `已确认技术决策`；
+2. 当前要执行的 Task；
+3. 当前 POC 的独立验收门槛；
+4. 末尾 `失败处理矩阵` 中与当前 POC 相关的行；
+5. 如涉及收尾，再读取 `Phase 5`、`计划完成前自检` 和 `后续边界`。
+
+建议按以下分组推进，不要一次性要求实现全部内容：
+
+| 执行轮次 | 范围 | 目标 |
+|---|---|---|
+| 1 | Task 1-2 | 建立 POC 构建边界、素材目录和公共协议 |
+| 2 | Task 3-5 | 完成 POC 1：Windows 指定 Chromium 窗口捕获 |
+| 3 | Task 6-8 | 完成 POC 2：统一时钟、F7/F9/F10 标记和漂移验收 |
+| 4 | Task 9-12 | 完成 POC 3：页面事件、多标签页和虚拟鼠标 |
+| 5 | Task 13-15 | 完成 POC 4：多源 Segment preview 渲染 |
+| 6 | Task 16 | 汇总 POC 结果、回归、更新索引并归档 |
+
+禁止在本计划中提前实现正式人工录制产品能力：`recording-guide.json` 生成、正式悬浮窗 UI、Action tracker、Agent edit-plan、Segment 审核、TTS/字幕/final 流程，以及 `video:record` / `video:preview` / `video:finalize` 正式命令。这些必须等四个 POC 通过并产出结果文档后，在下一份正式产品实施计划中处理。
+
 ---
 
 ## 状态
