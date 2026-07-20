@@ -16,6 +16,11 @@ let activeStream: MediaStream | null = null;
 let writeQueue = Promise.resolve();
 let sequence = 0;
 let firstChunkMarked = false;
+let stopTimer: number | undefined;
+
+window.addEventListener('manual-capture-stop-request', () => {
+  void stopCapture();
+});
 
 startButton?.addEventListener('click', () => {
   void startCapture();
@@ -33,7 +38,7 @@ submitChecklist?.addEventListener('click', () => {
     overlayEnteredCapture: !overlayClear.checked,
     multiTabContinuous: multiTab.checked,
     notes: notes.value,
-  });
+  }).then(() => setStatus('checklist-submitted'));
 });
 
 async function startCapture(): Promise<void> {
@@ -66,6 +71,12 @@ async function startCapture(): Promise<void> {
     });
   });
   recorder.start(250);
+  const durationSeconds = readDurationSeconds();
+  if (durationSeconds !== null) {
+    stopTimer = window.setTimeout(() => {
+      void stopCapture();
+    }, durationSeconds * 1000);
+  }
   setStatus('recording');
 }
 
@@ -76,6 +87,10 @@ async function stopCapture(): Promise<void> {
     return;
   }
   setStatus('stopping');
+  if (stopTimer !== undefined) {
+    window.clearTimeout(stopTimer);
+    stopTimer = undefined;
+  }
   const stopped = new Promise<void>((resolve) => recorder.addEventListener('stop', () => resolve(), { once: true }));
   recorder.stop();
   await stopped;
@@ -90,6 +105,15 @@ async function stopCapture(): Promise<void> {
 function pickRecorderMimeType(): RecorderMimeType {
   const candidates: RecorderMimeType[] = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? 'video/webm';
+}
+
+function readDurationSeconds(): number | null {
+  const argument = location.search.match(/[?&]durationSeconds=(\d+)/)?.[1];
+  if (argument === undefined) {
+    return null;
+  }
+  const value = Number(argument);
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function setStatus(status: string): void {
