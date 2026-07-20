@@ -720,7 +720,7 @@ git commit -m "feat: add Windows capture source binding"
 - Test: `tests/video-generator/capture-normalize-video.unit.test.ts`
 - Test: `tests/video-generator/windows-electron.unit.test.ts`
 
-- [ ] **Step 1: 写 ffmpeg 规范化参数失败测试**
+- [x] **Step 1: 写 ffmpeg 规范化参数失败测试**
 
 测试从 `node:fs/promises` 导入 `access`、`mkdtemp`、`readFile`、`rm`、`writeFile`，从 `node:os` 导入 `tmpdir`，从 `node:path` 导入默认 `path`：
 
@@ -772,12 +772,12 @@ test('removes temporary mp4 and preserves the raw WebM when normalization fails'
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npx tsx --test tests/video-generator/capture-normalize-video.unit.test.ts`  
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现 MP4 规范化**
+- [x] **Step 3: 实现 MP4 规范化**
 
 `normalize-video.ts` 使用现有 `RunCommand` 和 `assertFfmpegAvailable`，并从 `node:fs/promises` 导入 `rename`、`rm`：
 
@@ -815,7 +815,7 @@ export async function normalizeCapturedVideo(input: {
 
 同文件实现 `parseNormalizedVideoProbe(stdout)`：解析所有 streams，计算 video/audio 数量，解析 `r_frame_rate` 分数，并拒绝 JSON 无效、缺视频、duration 非有限数。单元测试再加入 1280×720、AAC audio、VP9、非 yuv420p 四个 ffprobe stdout，均断言不 rename 正式 MP4。
 
-- [ ] **Step 4: 实现安全 preload API**
+- [x] **Step 4: 实现安全 preload API**
 
 `capture-preload.cts`：
 
@@ -833,7 +833,7 @@ contextBridge.exposeInMainWorld('manualCapture', {
 
 只暴露上述五个受限方法，不暴露 `ipcRenderer`、`fs` 或 `child_process`。同时创建 `pocs/manual-recording/capture-renderer.d.ts`，声明 `window.manualCapture` 的五个方法（`appendChunk`、`markFirstChunk`、`flush`、`stop`、`submitChecklist`）和返回类型，确保 renderer 在 `nodeIntegration: false` 下不依赖 Node `Buffer`。
 
-- [ ] **Step 5: 实现 renderer 捕获状态机**
+- [x] **Step 5: 实现 renderer 捕获状态机**
 
 `capture-renderer.ts` 的关键顺序必须固定：
 
@@ -866,7 +866,7 @@ recorder.start(250);
 
 停止时先为 `stop` 事件创建 Promise，再调用 `recorder.stop()`；收到最终 `dataavailable` 和 `stop` 后 `await writeQueue`，调用 `flush(sequence - 1)` 等待 main 确认所有 sequence 连续写完，最后停止 stream tracks 并调用 `capture:stop`。若 VP9 不支持，按 `video/webm;codecs=vp8`、`video/webm` 顺序降级，并把选择结果写入报告。
 
-- [ ] **Step 6: 实现 Electron main capture provider**
+- [x] **Step 6: 实现 Electron main capture provider**
 
 `windows-electron.ts` 必须：
 
@@ -884,7 +884,7 @@ recorder.start(250);
 12. 正常停止后调用 `normalizeCapturedVideo`。
 13. 捕获中断时关闭文件句柄、保留 raw、返回 `complete: false`。
 
-- [ ] **Step 7: 写 Electron IPC/handler 单元测试**
+- [x] **Step 7: 写 Electron IPC/handler 单元测试**
 
 `windows-electron.unit.test.ts` 注入假的 `desktopCapturer`、`session`、`webContents.fromFrame`、control `webContents.id` 和 chunk writer，验证：
 
@@ -900,7 +900,7 @@ sequence 0,2 在 flush 时失败并指出缺少 1
 停止后 display media handler 被重置为 null
 ```
 
-- [ ] **Step 8: 运行单元和构建测试**
+- [x] **Step 8: 运行单元和构建测试**
 
 Run:
 
