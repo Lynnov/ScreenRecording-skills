@@ -220,7 +220,7 @@ tsconfig.electron-poc.json
 - Create: `pocs/manual-recording/capture.html`
 - Create: `pocs/manual-recording/capture-fixture.html`
 
-- [ ] **Step 1: 写 Electron POC 构建配置**
+- [x] **Step 1: 写 Electron POC 构建配置**
 
 创建 `tsconfig.electron-poc.json`：
 
@@ -247,7 +247,7 @@ tsconfig.electron-poc.json
 
 预期：根 `tsconfig.json` 继续只提供 Node 类型；DOM/Electron 类型不会污染现有 CLI。
 
-- [ ] **Step 2: 添加固定 Electron 依赖和 POC scripts**
+- [x] **Step 2: 添加固定 Electron 依赖和 POC scripts**
 
 运行：
 
@@ -292,7 +292,7 @@ for (const file of htmlFiles) {
 }
 ```
 
-- [ ] **Step 3: 写最小 Electron HTML**
+- [x] **Step 3: 写最小 Electron HTML**
 
 `pocs/manual-recording/capture.html` 只供 Electron control `BrowserWindow` 加载，包含状态、计时和开始/结束按钮，不构成正式 UI：
 
@@ -330,7 +330,7 @@ for (const file of htmlFiles) {
 
 Electron `BrowserWindow.loadFile()` 只加载 `capture.html`；Playwright Page 的 `--fixture capture` 只导航到 `capture-fixture.html`。
 
-- [ ] **Step 4: 验证依赖和构建边界**
+- [x] **Step 4: 验证依赖和构建边界**
 
 Run:
 
@@ -367,7 +367,7 @@ git commit -m "chore: add manual recording poc build"
 - Create: `src/lib/video-generator/recording/artifacts.ts`
 - Test: `tests/video-generator/manual-artifacts.unit.test.ts`
 
-- [ ] **Step 1: 写失败测试，锁定目录和不可覆盖命名**
+- [x] **Step 1: 写失败测试，锁定目录和不可覆盖命名**
 
 `tests/video-generator/manual-artifacts.unit.test.ts`：
 
@@ -400,7 +400,7 @@ test('refuses to prepare a run when protected original artifacts already exist',
 });
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run:
 
@@ -410,7 +410,7 @@ npx tsx --test tests/video-generator/manual-artifacts.unit.test.ts
 
 Expected: FAIL，错误包含 `Cannot find module .../recording/artifacts.js`。
 
-- [ ] **Step 3: 实现公共类型**
+- [x] **Step 3: 实现公共类型**
 
 `src/lib/video-generator/recording/types.ts` 定义。注意：本 POC manifest 保留设计基线的 `tabsPath` 和 `attempts` 字段；四个基础 POC 尚无 recording guide 时，`attempts` 写空数组，不编造 Action：
 
@@ -470,7 +470,7 @@ export interface RecordingManifest {
 }
 ```
 
-- [ ] **Step 4: 实现人工素材目录**
+- [x] **Step 4: 实现人工素材目录**
 
 `src/lib/video-generator/recording/artifacts.ts` 导出：
 
@@ -549,7 +549,7 @@ export async function assertManualRunIsWritable(artifacts: ManualRunArtifacts): 
 
 测试文件需额外导入 `mkdtemp`、`rm`、`writeFile`、`tmpdir`、`assertManualRunIsWritable`，并在 `finally` 删除临时目录。
 
-- [ ] **Step 5: 运行定向测试和全量回归**
+- [x] **Step 5: 运行定向测试和全量回归**
 
 Run:
 
