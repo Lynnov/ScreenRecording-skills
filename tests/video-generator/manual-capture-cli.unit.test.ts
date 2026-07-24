@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseManualPocArgs, runManualCapturePoc, shouldRunManualCaptureEntrypoint } from '../../pocs/manual-recording/capture-main.js';
+import { parseManualPocArgs, runManualCaptureEntrypoint, runManualCapturePoc, shouldRunManualCaptureEntrypoint } from '../../pocs/manual-recording/capture-main.js';
 
 test('parses manual capture POC arguments', () => {
   assert.deepEqual(parseManualPocArgs(['--help']), { help: true });
@@ -39,6 +39,22 @@ test('detects Electron main execution even when argv[1] is not the module path',
     modulePath: 'E:/Code/ScreenRecording/dist/manual-recording-poc/pocs/manual-recording/capture-main.js',
     isElectronMain: false,
   }), false);
+});
+
+test('runs manual capture entrypoint through an async function instead of top-level await', async () => {
+  const messages: Array<{ level: 'log' | 'error'; message: string }> = [];
+  const result = await runManualCaptureEntrypoint({
+    argv: ['--help'],
+    createDeps: async () => {
+      throw new Error('help must not initialize Electron deps');
+    },
+    log: (message) => messages.push({ level: 'log', message }),
+    error: (message) => messages.push({ level: 'error', message }),
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(messages[0]?.level, 'log');
+  assert.match(messages[0]?.message ?? '', /Usage: capture-main/);
 });
 
 test('runs cleanup hooks for help, platform failure, source failure, and capture failure', async () => {

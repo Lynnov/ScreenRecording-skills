@@ -17,6 +17,17 @@ test('returns the only exact title match', () => {
   ], 'VG-CAPTURE-abc'), { id: 'window:102:0', name: 'VG-CAPTURE-abc' });
 });
 
+test('returns the only Chromium window whose title starts with the binding title', () => {
+  assert.deepEqual(matchUniqueWindowSource([
+    { id: 'window:101:0', name: 'Other' },
+    { id: 'window:102:0', name: 'VG-CAPTURE-abc - Google Chrome for Testing' },
+  ], 'VG-CAPTURE-abc'), { id: 'window:102:0', name: 'VG-CAPTURE-abc - Google Chrome for Testing' });
+  assert.throws(() => matchUniqueWindowSource([
+    { id: 'window:102:0', name: 'VG-CAPTURE-abc - Google Chrome for Testing' },
+    { id: 'window:103:0', name: 'VG-CAPTURE-abc - Google Chrome' },
+  ], 'VG-CAPTURE-abc'), /multiple/i);
+});
+
 test('parses Windows handles from Electron desktop capturer source ids', () => {
   assert.equal(parseWindowsHandle('window:102:0'), 102n);
   assert.throws(() => parseWindowsHandle('screen:102:0'), /unsupported/i);

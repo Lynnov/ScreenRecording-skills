@@ -4,7 +4,10 @@ export function matchUniqueWindowSource(
   sources: readonly CaptureSourceDescriptor[],
   expectedTitle: string,
 ): CaptureSourceDescriptor {
-  const matches = sources.filter((source) => source.name === expectedTitle);
+  const exactMatches = sources.filter((source) => source.name === expectedTitle);
+  const matches = exactMatches.length > 0
+    ? exactMatches
+    : sources.filter((source) => source.name.startsWith(`${expectedTitle} - `));
   if (matches.length === 0) {
     throw new Error(`Chromium capture source "${expectedTitle}" was not found.`);
   }

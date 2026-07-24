@@ -39,6 +39,14 @@ export interface ManualCapturePocResult {
 const USAGE = `Usage: capture-main --output <dir> --display-mode f11|borderless-maximized --fixture capture|clock|events --duration-seconds <positive integer>`;
 const execFileAsync = promisify(execFile);
 
+export function formatManualPocLogStep(message: string): string {
+  return `[manual-poc] ${message}`;
+}
+
+function logStep(message: string): void {
+  console.log(formatManualPocLogStep(message));
+}
+
 type ElectronModule = typeof import('electron');
 type DesktopCapturerSourceLike = CaptureSourceDescriptor & { thumbnail?: unknown };
 
@@ -134,7 +142,15 @@ export async function runManualCapturePoc(argv: string[], deps: ManualCapturePoc
 }
 
 async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
+  logStep('importing Electron module');
   const electron = await import('electron');
+  logStep('Electron module imported');
+  logStep(`process argv: ${JSON.stringify(process.argv)}`);
+  logStep(`Electron versions: ${JSON.stringify({ electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node })}`);
+  logStep(`Electron app initial ready state: ${electron.app.isReady()}`);
+  electron.app.once('will-finish-launching', () => logStep('Electron app event: will-finish-launching'));
+  electron.app.once('ready', () => logStep('Electron app event: ready'));
+  electron.app.once('window-all-closed', () => logStep('Electron app event: window-all-closed'));
   let artifacts: ManualRunArtifacts | null = null;
   let chromiumSession: ManualChromiumSession | null = null;
   let matchedSource: DesktopCapturerSourceLike | null = null;
@@ -148,26 +164,36 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
     }
   };
 
+  logStep('waiting for Electron app ready');
   await electron.app.whenReady();
+  logStep('Electron app ready');
 
   return {
     platform: process.platform,
     async prepareOutput(args) {
+      logStep(`preparing output at ${args.output}`);
       artifacts = createManualRunArtifacts(args.output);
       await ensureManualRunArtifactDirs(artifacts);
       await assertManualRunIsWritable(artifacts);
+      logStep('output prepared');
     },
     async bindSource(args) {
       if (artifacts === null) {
         throw new Error('Manual capture artifacts were not prepared.');
       }
       const sessionId = String(Date.now());
+      logStep(`launching Chromium session ${sessionId}`);
       chromiumSession = await launchManualChromiumSession({
         sessionId,
         fixtureDir: path.dirname(fileURLToPath(import.meta.url)),
       });
+      logStep(`Chromium launched with binding title ${chromiumSession.bindingTitle}`);
+      logStep('polling desktop sources for Chromium binding window');
       matchedSource = await waitForUniqueWindowSource(electron, chromiumSession.bindingTitle, 10_000);
+      logStep(`source bound: ${matchedSource.name} (${matchedSource.id})`);
+      logStep(`navigating Chromium to ${args.fixture} fixture`);
       await chromiumSession.navigateToFixture(args.fixture);
+      logStep(`Chromium fixture loaded: ${args.fixture}`);
       console.log(`Bound Chromium window source: ${matchedSource.name} (${matchedSource.id})`);
       if (args.displayMode === 'f11') {
         console.log('请切到 Chromium 窗口并按 F11，然后回到控制窗点击“开始”。');
@@ -192,6 +218,7 @@ async function runElectronCaptureSession(
   source: DesktopCapturerSourceLike,
 ): Promise<CapturePocReport> {
   const preloadPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture-preload.cjs');
+  logStep(`creating control window with preload ${preloadPath}`);
   const controlWindow = new electron.BrowserWindow({
     width: 320,
     height: 220,
@@ -309,6 +336,7 @@ async function runElectronCaptureSession(
     });
   });
 
+  logStep('registering display media request handler');
   electron.session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     try {
       const frame = request.frame;
@@ -326,14 +354,23 @@ async function runElectronCaptureSession(
     }
   });
 
-  electron.globalShortcut.register('F10', () => {
+  logStep('registering F10 global shortcut');
+  const shortcutRegistered = electron.globalShortcut.register('F10', () => {
     controlWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("manual-capture-stop-request"));').catch(() => undefined);
   });
+  logStep(`F10 global shortcut registered: ${shortcutRegistered}`);
 
-  controlWindow.once('ready-to-show', () => controlWindow.show());
-  await controlWindow.loadFile(path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture.html'), {
+  controlWindow.once('ready-to-show', () => {
+    logStep('control window ready-to-show');
+    controlWindow.show();
+    logStep('control window shown');
+  });
+  const captureHtmlPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture.html');
+  logStep(`loading control window file ${captureHtmlPath}`);
+  await controlWindow.loadFile(captureHtmlPath, {
     query: { durationSeconds: String(args.durationSeconds) },
   });
+  logStep('control window loadFile resolved');
   console.log('控制窗已打开：点击“开始”开始窗口捕获；结束时可按 F10 或点击“结束”，随后提交验收勾选。');
 
   return completion.finally(() => {
@@ -353,8 +390,16 @@ async function runElectronCaptureSession(
 async function waitForUniqueWindowSource(electron: ElectronModule, expectedTitle: string, timeoutMs: number): Promise<DesktopCapturerSourceLike> {
   const startedAt = Date.now();
   let lastMissingError: Error | null = null;
+  let attempt = 0;
   while (Date.now() - startedAt <= timeoutMs) {
+    attempt += 1;
+    logStep(`desktop source poll #${attempt}`);
     const sources = (await electron.desktopCapturer.getSources({ types: ['window'], fetchWindowIcons: false })) as DesktopCapturerSourceLike[];
+    logStep(`desktop source poll #${attempt} returned ${sources.length} window source(s)`);
+    if (attempt === 1 || attempt % 10 === 0) {
+      const sourceSummary = sources.slice(0, 20).map((source) => `${source.id}:${source.name}`).join(' | ');
+      logStep(`desktop source names: ${sourceSummary}`);
+    }
     try {
       const matched = matchUniqueWindowSource(sources, expectedTitle);
       return sources.find((source) => source.id === matched.id) ?? matched;
@@ -393,22 +438,40 @@ function delay(milliseconds: number): Promise<void> {
 
 async function asyncNoop(): Promise<void> {}
 
-if (shouldRunManualCaptureEntrypoint({ argv1: process.argv[1], modulePath: fileURLToPath(import.meta.url), isElectronMain: process.versions.electron !== undefined })) {
+export async function runManualCaptureEntrypoint(input: {
+  argv: string[];
+  createDeps?: () => Promise<ManualCapturePocDeps>;
+  log?: (message: string) => void;
+  error?: (message: string) => void;
+}): Promise<ManualCapturePocResult> {
+  const log = input.log ?? console.log;
+  const errorLog = input.error ?? console.error;
   let result: ManualCapturePocResult;
   try {
-    const parsed = parseManualPocArgs(process.argv.slice(2));
+    const parsed = parseManualPocArgs(input.argv);
     if (parsed.help) {
       result = await runManualCapturePoc(['--help']);
     } else {
-      const deps = await createRealManualCaptureDeps();
-      result = await runManualCapturePoc(process.argv.slice(2), deps);
+      const deps = await (input.createDeps ?? createRealManualCaptureDeps)();
+      result = await runManualCapturePoc(input.argv, deps);
     }
   } catch (error) {
     result = { exitCode: 2, message: `${formatError(error)}\n${USAGE}` };
   }
   if (result.message) {
-    const output = result.exitCode === 0 ? console.log : console.error;
+    const output = result.exitCode === 0 ? log : errorLog;
     output(result.message);
   }
-  process.exit(result.exitCode);
+  return result;
+}
+
+if (shouldRunManualCaptureEntrypoint({ argv1: process.argv[1], modulePath: fileURLToPath(import.meta.url), isElectronMain: process.versions.electron !== undefined })) {
+  void runManualCaptureEntrypoint({ argv: process.argv.slice(2) })
+    .then((result) => {
+      process.exit(result.exitCode);
+    })
+    .catch((error) => {
+      console.error(`${formatError(error)}\n${USAGE}`);
+      process.exit(2);
+    });
 }
