@@ -79,6 +79,7 @@ public static class NativeWindow {
 
 const GWL_STYLE = -16;
 const GWL_EXSTYLE = -20;
+const SW_MAXIMIZE = 3;
 const SW_RESTORE = 9;
 const SWP_NOZORDER = 0x0004;
 const SWP_FRAMECHANGED = 0x0020;
@@ -88,6 +89,7 @@ const WS_CAPTION = 0x00c00000n;
 const WS_THICKFRAME = 0x00040000n;
 const WS_MINIMIZEBOX = 0x00020000n;
 const WS_MAXIMIZEBOX = 0x00010000n;
+const WS_MAXIMIZE = 0x01000000n;
 
 export function buildEnableBorderlessCommand(handle: bigint): WindowsCommand {
   const decodedScript = `${USER32_DEFINITION}
@@ -99,7 +101,7 @@ $stylePtr = [NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $exStylePtr = [NativeWindow]::GetWindowLongPtr64($handle, ${GWL_EXSTYLE})
 $style = [Int64]$stylePtr
 $exStyle = [Int64]$exStylePtr
-$newStyle = $style -band -bnot (${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()} -bor ${WS_MINIMIZEBOX.toString()} -bor ${WS_MAXIMIZEBOX.toString()})
+$newStyle = $style -band -bnot (${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()} -bor ${WS_MINIMIZEBOX.toString()} -bor ${WS_MAXIMIZEBOX.toString()} -bor ${WS_MAXIMIZE.toString()})
 [void][NativeWindow]::SetWindowLongPtr64($handle, ${GWL_STYLE}, [IntPtr]::new($newStyle))
 $monitor = [NativeWindow]::MonitorFromWindow($handle, ${MONITOR_DEFAULTTONEAREST})
 if ($monitor -eq [IntPtr]::Zero) { throw "MonitorFromWindow failed" }
@@ -141,7 +143,8 @@ $handle = [IntPtr]::new(${handle.toString()})
 [void][NativeWindow]::SetWindowLongPtr64($handle, ${GWL_STYLE}, [IntPtr]::new(${snapshot.style.toString()}))
 [void][NativeWindow]::SetWindowLongPtr64($handle, ${GWL_EXSTYLE}, [IntPtr]::new(${snapshot.exStyle.toString()}))
 if (-not [NativeWindow]::SetWindowPos($handle, [IntPtr]::Zero, ${bounds.left}, ${bounds.top}, ${width}, ${height}, ${SWP_NOZORDER} -bor ${SWP_FRAMECHANGED})) { throw "SetWindowPos SWP_FRAMECHANGED failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
-[void][NativeWindow]::ShowWindow($handle, ${SW_RESTORE})
+$showCommand = if ((${snapshot.style.toString()} -band ${WS_MAXIMIZE.toString()}) -ne 0) { ${SW_MAXIMIZE} } else { ${SW_RESTORE} }
+[void][NativeWindow]::ShowWindow($handle, $showCommand)
 $restoredRect = New-Object NativeWindow+RECT
 if (-not [NativeWindow]::GetWindowRect($handle, [ref]$restoredRect)) { throw "GetWindowRect restore verify failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
 $restoredStyle = [Int64][NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
