@@ -35,6 +35,11 @@ import { createEventLog } from '../../src/lib/video-generator/recording/event-lo
 import { analyzeClockDrift } from '../../src/lib/video-generator/recording/drift.js';
 import { writeRecordingManifest } from '../../src/lib/video-generator/recording/manifest.js';
 import { writeManualEventsPocReport } from '../../src/lib/video-generator/recording/events-poc-report.js';
+import {
+  collectMarkerEvidence,
+  type ClockMarkerType,
+  type MarkerEvidence,
+} from '../../src/lib/video-generator/recording/marker-evidence.js';
 import type { CaptureSourceDescriptor } from '../../src/lib/video-generator/capture/types.js';
 import type { CaptureClockSample, RecordingEvent, RecordingManifest } from '../../src/lib/video-generator/recording/types.js';
 
@@ -146,13 +151,16 @@ export function createManualMarkerController(
   onEvent: (event: RecordingEvent) => void | Promise<void> = asyncNoop,
 ) {
   const markerEvents: RecordingEvent[] = [];
+  let eventQueue = Promise.resolve();
   let stopRequested = false;
 
   const recordUserMarker = (type: string): RecordingEvent => {
     const event: RecordingEvent = { type, ...clock.stamp() };
     markerEvents.push(event);
     log(`recorded marker ${type} at session=${event.sessionTimeMs}ms video=${event.videoTimeMs ?? 'null'}ms`);
-    void Promise.resolve(onEvent(event)).catch((error) => log(`failed to append marker event: ${formatError(error)}`));
+    eventQueue = eventQueue.then(() => onEvent(event)).catch((error) => {
+      log(`failed to append marker event: ${formatError(error)}`);
+    });
     return event;
   };
 
@@ -167,19 +175,52 @@ export function createManualMarkerController(
       return clock.firstVideoFrameSessionTimeMs();
     },
     recordUserMarker,
-    requestStopConfirmation() {
+    requestStopConfirmation(recordConfirmedMarker = true) {
       if (!stopRequested) {
         stopRequested = true;
         recordUserMarker('recording-stop-requested');
         return;
       }
-      recordUserMarker('recording-stop');
+      if (recordConfirmedMarker) recordUserMarker('recording-stop');
       requestStop();
+    },
+    stopRequested() {
+      return stopRequested;
+    },
+    async flushEvents() {
+      await eventQueue;
     },
     events() {
       return [...markerEvents];
     },
   };
+}
+
+interface ClockFixturePage {
+  evaluate(
+    callback: unknown,
+    request: { name: ClockMarkerType; requestedVideoTimeMs: number | null },
+  ): Promise<unknown>;
+}
+
+export async function recordClockFixtureMarker(
+  page: ClockFixturePage,
+  controller: ReturnType<typeof createManualMarkerController>,
+  type: ClockMarkerType,
+): Promise<RecordingEvent> {
+  const requested = controller.stamp();
+  await page.evaluate(({ name, requestedVideoTimeMs }: {
+    name: ClockMarkerType;
+    requestedVideoTimeMs: number | null;
+  }) => {
+    const fixture = globalThis as typeof globalThis & {
+      showMarker(markerName: ClockMarkerType, markerVideoTimeMs: number | null): Promise<number>;
+    };
+    return fixture.showMarker(name, requestedVideoTimeMs);
+  }, { name: type, requestedVideoTimeMs: requested.videoTimeMs });
+  const event = controller.recordUserMarker(type);
+  await controller.flushEvents();
+  return event;
 }
 
 export async function runManualCapturePoc(argv: string[], deps: ManualCapturePocDeps = {}): Promise<ManualCapturePocResult> {
@@ -374,7 +415,7 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       logStep(`borderless window mode applied to handle ${borderlessMode.handle.toString()}`);
     },
     async startCapture(args) {
-      if (artifacts === null || matchedSource === null) {
+      if (artifacts === null || matchedSource === null || chromiumSession === null) {
         throw new Error('Manual capture source was not bound.');
       }
       if (eventLog === null || recordingClock === null) {
@@ -384,6 +425,7 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
         if (windowModeEvidence === null) {
           throw new Error('Window mode evidence was not initialized.');
         }
+        const fixturePage = chromiumSession.page;
         lastCaptureReport = await runElectronCaptureSession(
           electron,
           args,
@@ -392,6 +434,7 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
           recordingClock,
           appendRecordingEvent,
           windowModeEvidence,
+          fixturePage,
         );
       } finally {
         await finalizeEventCapture();
@@ -436,6 +479,7 @@ async function runElectronCaptureSession(
   recordingClock: RecordingClock,
   appendRecordingEvent: (event: RecordingEvent) => Promise<void>,
   windowModeEvidence: CaptureWindowModeEvidence,
+  fixturePage: ClockFixturePage,
 ): Promise<CapturePocReport> {
   const preloadPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture-preload.cjs');
   logStep(`creating control window with preload ${preloadPath}`);
@@ -470,6 +514,7 @@ async function runElectronCaptureSession(
   let checklist: CaptureOperatorChecklist | null = null;
   let sampledFrames: string[] = [];
   let clockSamples: CaptureClockSample[] = [];
+  let markerEvidence: MarkerEvidence[] = [];
 
   const reportBase = (): Omit<CapturePocReport, 'status' | 'overlayEnteredCapture' | 'multiTabContinuous' | 'errors'> => ({
     version: 1,
@@ -555,6 +600,19 @@ async function runElectronCaptureSession(
           hasAudio: false,
         };
         normalizedVideoStatus = 'passed';
+        if (args.fixture === 'clock') {
+          const markerTypes: ClockMarkerType[] = ['recording-start', 'retry-start', 'recording-stop'];
+          markerEvidence = await collectMarkerEvidence({
+            videoPath: artifacts.originalVideoPath,
+            outputDir: artifacts.markerEvidenceDir,
+            fps: metadata.fps ?? 30,
+            markers: markerTypes.map((type) => ({
+              type,
+              videoTimeMs: markerController.events().find((event) => event.type === type)?.videoTimeMs ?? null,
+            })),
+            runCommand: runMarkerCommand,
+          });
+        }
       } catch (error) {
         captureError = formatError(error);
         video = { status: 'unavailable', path: null, reason: captureError };
@@ -565,6 +623,8 @@ async function runElectronCaptureSession(
         samples: clockSamples,
         firstVideoFrameSessionTimeMs: markerController.firstVideoFrameSessionTimeMs(),
         captureComplete: captureError === null,
+        fixture: args.fixture,
+        markerEvidence,
       }));
     });
     electron.ipcMain.handle('capture:submit-checklist', async (_event, value: unknown) => {
@@ -596,9 +656,25 @@ async function runElectronCaptureSession(
   });
 
   logStep('registering F7/F9/F10 global shortcuts');
-  const f7Registered = electron.globalShortcut.register('F7', () => markerController.recordUserMarker('recording-start'));
-  const f9Registered = electron.globalShortcut.register('F9', () => markerController.recordUserMarker('retry-start'));
-  const f10Registered = electron.globalShortcut.register('F10', () => markerController.requestStopConfirmation());
+  const recordMarker = (type: ClockMarkerType) => {
+    if (args.fixture === 'clock') {
+      void recordClockFixtureMarker(fixturePage, markerController, type)
+        .catch((error) => logStep(`clock marker ${type} failed: ${formatError(error)}`));
+    } else {
+      markerController.recordUserMarker(type);
+    }
+  };
+  const f7Registered = electron.globalShortcut.register('F7', () => recordMarker('recording-start'));
+  const f9Registered = electron.globalShortcut.register('F9', () => recordMarker('retry-start'));
+  const f10Registered = electron.globalShortcut.register('F10', () => {
+    if (args.fixture !== 'clock' || !markerController.stopRequested()) {
+      markerController.requestStopConfirmation();
+      return;
+    }
+    void recordClockFixtureMarker(fixturePage, markerController, 'recording-stop')
+      .then(() => markerController.requestStopConfirmation(false))
+      .catch((error) => logStep(`clock marker recording-stop failed: ${formatError(error)}`));
+  });
   logStep(`F7 global shortcut registered: ${f7Registered}`);
   logStep(`F9 global shortcut registered: ${f9Registered}`);
   logStep(`F10 global shortcut registered: ${f10Registered}`);
@@ -682,12 +758,22 @@ const runWindowsCommand = async (command: WindowsCommand) => {
   return { stdout: result.stdout, stderr: result.stderr };
 };
 
+const runMarkerCommand = async (command: string, args: string[]) =>
+  new Promise<{ stdout: Buffer; stderr: Buffer }>((resolve, reject) => {
+    execFile(command, args, { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) reject(error);
+      else resolve({ stdout, stderr });
+    });
+  });
+
 function buildRecordingManifest(input: {
   artifacts: ManualRunArtifacts;
   video: CapturePocReport['video'];
   samples: CaptureClockSample[];
   firstVideoFrameSessionTimeMs: number | null;
   captureComplete: boolean;
+  fixture: ManualPocFixture;
+  markerEvidence: MarkerEvidence[];
 }): RecordingManifest {
   const availableDurationMs = input.video.status === 'available' ? input.video.durationMs : 0;
   const drift = analyzeClockDrift(input.samples, availableDurationMs);
@@ -709,7 +795,11 @@ function buildRecordingManifest(input: {
     maxAllowedResidualMs: drift.maxAllowedResidualMs,
     ffprobeDurationDeltaMs: drift.ffprobeDurationDeltaMs,
     maxAllowedFfprobeDurationDeltaMs: drift.maxAllowedFfprobeDurationDeltaMs,
-    captureComplete: input.captureComplete && drift.status === 'ok',
+    markerEvidence: input.markerEvidence,
+    captureComplete: input.captureComplete
+      && drift.status === 'ok'
+      && (input.fixture !== 'clock'
+        || input.markerEvidence.length === 3 && input.markerEvidence.every((item) => item.passed)),
   };
 }
 

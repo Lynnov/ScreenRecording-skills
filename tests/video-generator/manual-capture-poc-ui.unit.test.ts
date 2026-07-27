@@ -36,6 +36,9 @@ test('clock fixture exposes marker colors for clock POC validation', async () =>
   assert.match(html, /recording-start/);
   assert.match(html, /retry-start/);
   assert.match(html, /recording-stop/);
+  assert.match(html, /position:\s*fixed/);
+  assert.match(html, /left:\s*0/);
+  assert.match(html, /top:\s*0/);
 });
 
 test('capture main records sampled frame evidence paths in the report', async () => {
@@ -66,6 +69,7 @@ test('capture main writes clock samples and recording manifest artifacts', async
   assert.match(main, /mediaTimeMs/);
   assert.match(main, /analyzeClockDrift/);
   assert.match(main, /writeRecordingManifest/);
+  assert.match(main, /collectMarkerEvidence/);
   assert.match(main, /recording-manifest\.json|manifestPath/);
 });
 

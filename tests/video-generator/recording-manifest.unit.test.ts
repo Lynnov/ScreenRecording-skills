@@ -31,6 +31,7 @@ const manifest: RecordingManifest = {
   maxAllowedResidualMs: 250,
   ffprobeDurationDeltaMs: 20,
   maxAllowedFfprobeDurationDeltaMs: 316,
+  markerEvidence: [],
   captureComplete: true,
 };
 

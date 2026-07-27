@@ -15,6 +15,7 @@ test('creates deterministic manual recording artifact paths', () => {
   assert.equal(artifacts.originalVideoPath, path.join(artifacts.captureDir, 'original-window.mp4'));
   assert.equal(artifacts.eventsPath, path.join(artifacts.captureDir, 'events.jsonl'));
   assert.equal(artifacts.manifestPath, path.join(artifacts.captureDir, 'recording-manifest.json'));
+  assert.equal(artifacts.markerEvidenceDir, path.join(artifacts.reportsDir, 'clock-marker-frames'));
   assert.equal(artifacts.previewVideoPath, path.join(artifacts.editDir, 'preview.mp4'));
   assert.equal(artifacts.pickupPath('segment-003', 1), path.join(artifacts.pickupsDir, 'segment-003-attempt-001.mp4'));
 });

@@ -54,5 +54,7 @@ export interface RecordingManifest {
   maxAllowedResidualMs: number;
   ffprobeDurationDeltaMs: number;
   maxAllowedFfprobeDurationDeltaMs: number;
+  markerEvidence: MarkerEvidence[];
   captureComplete: boolean;
 }
+import type { MarkerEvidence } from './marker-evidence.js';

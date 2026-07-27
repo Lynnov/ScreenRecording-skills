@@ -27,6 +27,7 @@ export interface ManualRunArtifacts {
   captureOperatorChecklistPath: string;
   captureFfprobeJsonPath: string;
   captureEvidenceFramesDir: string;
+  markerEvidenceDir: string;
   manualEventsPocReportPath: string;
   pickupPath(segmentId: string, attempt: number): string;
 }
@@ -53,6 +54,7 @@ export function createManualRunArtifacts(outputDir: string): ManualRunArtifacts 
     captureOperatorChecklistPath: path.join(reportsDir, 'capture-poc-operator-checklist.json'),
     captureFfprobeJsonPath: path.join(reportsDir, 'capture-poc-ffprobe.json'),
     captureEvidenceFramesDir: path.join(reportsDir, 'capture-poc-frames'),
+    markerEvidenceDir: path.join(reportsDir, 'clock-marker-frames'),
     manualEventsPocReportPath: path.join(reportsDir, 'manual-events-poc-report.json'),
     pickupPath: (segmentId, attempt) => path.join(pickupsDir, `${segmentId}-attempt-${String(attempt).padStart(3, '0')}.mp4`),
   };
@@ -65,6 +67,7 @@ export async function ensureManualRunArtifactDirs(artifacts: ManualRunArtifacts)
     mkdir(artifacts.editDir, { recursive: true }),
     mkdir(artifacts.reportsDir, { recursive: true }),
     mkdir(artifacts.captureEvidenceFramesDir, { recursive: true }),
+    mkdir(artifacts.markerEvidenceDir, { recursive: true }),
   ]);
 }
 

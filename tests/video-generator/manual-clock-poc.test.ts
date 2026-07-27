@@ -15,6 +15,14 @@ test('records manual marker events against the unified recording clock', async (
   assert.ok(manifest.maxResidualMs <= manifest.maxAllowedResidualMs);
   assert.ok(manifest.ffprobeDurationDeltaMs <= manifest.maxAllowedFfprobeDurationDeltaMs);
   assert.equal(typeof manifest.slopePpm, 'number');
+  assert.deepEqual(
+    manifest.markerEvidence.map((item: { type: string; passed: boolean }) => [item.type, item.passed]),
+    [
+      ['recording-start', true],
+      ['retry-start', true],
+      ['recording-stop', true],
+    ],
+  );
 
   const events = (await readFile(path.join(runDir, 'capture', 'events.jsonl'), 'utf8'))
     .split('\n')

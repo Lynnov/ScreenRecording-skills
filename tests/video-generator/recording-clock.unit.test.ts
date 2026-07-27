@@ -64,3 +64,30 @@ test('manual marker controller requires a second F10 before stopping', async () 
   assert.equal(stopRequests, 1);
   assert.equal(controller.events().at(-1)?.type, 'recording-stop');
 });
+
+test('shows a clock marker before stamping its formal recording event', async () => {
+  const { createManualMarkerController, recordClockFixtureMarker } =
+    await import('../../pocs/manual-recording/capture-main.js');
+  const order: string[] = [];
+  let nowNs = 0n;
+  const clock = createRecordingClock(() => nowNs);
+  clock.markFirstVideoFrame();
+  const controller = createManualMarkerController(clock, () => {}, () => {}, async () => {
+    order.push('event');
+  });
+  nowNs = 1_000_000n;
+  const page = {
+    async evaluate(_callback: unknown, request: { name: string; requestedVideoTimeMs: number | null }) {
+      order.push(`visible:${request.name}:${request.requestedVideoTimeMs}`);
+      nowNs = 3_000_000n;
+      return 123;
+    },
+  };
+
+  nowNs = 2_000_000n;
+  const event = await recordClockFixtureMarker(page, controller, 'retry-start');
+
+  assert.deepEqual(order, ['visible:retry-start:2', 'event']);
+  assert.equal(event.type, 'retry-start');
+  assert.equal(event.videoTimeMs, 3);
+});
