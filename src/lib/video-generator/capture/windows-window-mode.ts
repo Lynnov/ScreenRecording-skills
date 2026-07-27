@@ -123,7 +123,9 @@ $styleApplied = (($appliedStyle -band $forbiddenStyle) -eq 0)
 [int]$topDelta = $visibleRect.Top - $work.Top
 [int]$rightDelta = $visibleRect.Right - $work.Right
 [int]$bottomDelta = $visibleRect.Bottom - $work.Bottom
-$boundsApplied = (($leftDelta -ge -1) -and ($leftDelta -le 1)) -and (($topDelta -ge -1) -and ($topDelta -le 1)) -and (($rightDelta -ge -1) -and ($rightDelta -le 1)) -and (($bottomDelta -ge -1) -and ($bottomDelta -le 1))
+$visibleBoundsApplied = (($leftDelta -ge -1) -and ($leftDelta -le 1)) -and (($topDelta -ge -1) -and ($topDelta -le 1)) -and (($rightDelta -ge -1) -and ($rightDelta -le 1)) -and (($bottomDelta -ge -1) -and ($bottomDelta -le 1))
+$rawBoundsApplied = ($appliedRect.Left -eq $work.Left) -and ($appliedRect.Top -eq $work.Top) -and ($appliedRect.Right -eq $work.Right) -and ($appliedRect.Bottom -eq $work.Bottom)
+$boundsApplied = $visibleBoundsApplied -or $rawBoundsApplied
 $applied = $styleApplied -and $boundsApplied
 [pscustomobject]@{
   handle = [string]${handle.toString()}

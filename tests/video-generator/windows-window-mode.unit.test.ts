@@ -21,6 +21,7 @@ test('builds encoded PowerShell commands with a restorable snapshot', () => {
   assert.match(enable.decodedScript, /appliedStyle\s*=\s*\[string\]\$appliedStyle/);
   assert.match(enable.decodedScript, /\$styleApplied[\s\S]*\$boundsApplied[\s\S]*\$applied\s*=\s*\$styleApplied\s*-and\s*\$boundsApplied/);
   assert.match(enable.decodedScript, /\[int\]\$leftDelta[\s\S]*-ge -1[\s\S]*-le 1/);
+  assert.match(enable.decodedScript, /\$visibleBoundsApplied[\s\S]*\$rawBoundsApplied[\s\S]*\$boundsApplied\s*=\s*\$visibleBoundsApplied\s*-or\s*\$rawBoundsApplied/);
 
   const restore = buildRestoreWindowCommand(102n, {
     style: 13565952n,
