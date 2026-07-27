@@ -156,7 +156,7 @@ export async function enableBorderlessWindowMode(
   const result = await runCommand(buildEnableBorderlessCommand(handle));
   const parsed = parseJsonObject(result.stdout, 'borderless apply');
   if (parsed.applied !== true) {
-    throw new Error('Borderless window mode was not verified as applied.');
+    throw new Error(`Borderless window mode was not verified as applied: ${JSON.stringify(parsed)}`);
   }
   if (parsed.handle !== handle.toString()) {
     throw new Error('Borderless window mode returned a different window handle.');

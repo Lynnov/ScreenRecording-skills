@@ -78,7 +78,12 @@ test('fails closed for invalid window ids and unverified PowerShell results', as
       }),
       stderr: '',
     })),
-    /not verified/i,
+    (error: Error) => {
+      assert.match(error.message, /not verified/i);
+      assert.match(error.message, /"appliedBounds"/);
+      assert.match(error.message, /"applied":false/);
+      return true;
+    },
   );
   await assert.rejects(
     () => restoreBorderlessWindowMode({
