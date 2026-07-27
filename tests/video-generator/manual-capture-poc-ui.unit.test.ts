@@ -37,3 +37,16 @@ test('capture main records sampled frame evidence paths in the report', async ()
   assert.match(main, /ffmpeg/);
   assert.match(main, /frame-001/);
 });
+
+test('capture main routes manual markers through the unified recording clock', async () => {
+  const main = await readFile(path.join(pocDir, 'capture-main.ts'), 'utf8');
+  assert.match(main, /createRecordingClock/);
+  assert.match(main, /recordUserMarker/);
+  assert.match(main, /recording-start/);
+  assert.match(main, /retry-start/);
+  assert.match(main, /recording-stop-requested/);
+  assert.match(main, /recording-stop/);
+  assert.match(main, /globalShortcut\.register\('F7'/);
+  assert.match(main, /globalShortcut\.register\('F9'/);
+  assert.match(main, /globalShortcut\.register\('F10'/);
+});

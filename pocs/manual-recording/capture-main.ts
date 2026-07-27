@@ -10,7 +10,9 @@ import { normalizeCapturedVideo, parseNormalizedVideoProbe } from '../../src/lib
 import { assertManualRunIsWritable, createManualRunArtifacts, ensureManualRunArtifactDirs, type ManualRunArtifacts } from '../../src/lib/video-generator/recording/artifacts.js';
 import { launchManualChromiumSession, type ManualChromiumSession } from '../../src/lib/video-generator/recording/session.js';
 import { writeCaptureOperatorChecklist, writeCapturePocReport, type CaptureOperatorChecklist, type CapturePocReport } from '../../src/lib/video-generator/recording/poc-report.js';
+import { createRecordingClock, type RecordingClock } from '../../src/lib/video-generator/recording/clock.js';
 import type { CaptureSourceDescriptor } from '../../src/lib/video-generator/capture/types.js';
+import type { RecordingEvent } from '../../src/lib/video-generator/recording/types.js';
 
 export type ManualDisplayMode = 'f11' | 'borderless-maximized';
 export type ManualPocFixture = 'capture' | 'clock' | 'events';
@@ -109,6 +111,41 @@ export function shouldRunManualCaptureEntrypoint(input: {
   isElectronMain: boolean;
 }): boolean {
   return input.isElectronMain || input.argv1 === input.modulePath;
+}
+
+export function createManualMarkerController(
+  clock: RecordingClock,
+  requestStop: () => void,
+  log: (message: string) => void = logStep,
+) {
+  const markerEvents: RecordingEvent[] = [];
+  let stopRequested = false;
+
+  const recordUserMarker = (type: string): RecordingEvent => {
+    const event: RecordingEvent = { type, ...clock.stamp() };
+    markerEvents.push(event);
+    log(`recorded marker ${type} at session=${event.sessionTimeMs}ms video=${event.videoTimeMs ?? 'null'}ms`);
+    return event;
+  };
+
+  return {
+    markFirstVideoFrame() {
+      return clock.markFirstVideoFrame();
+    },
+    recordUserMarker,
+    requestStopConfirmation() {
+      if (!stopRequested) {
+        stopRequested = true;
+        recordUserMarker('recording-stop-requested');
+        return;
+      }
+      recordUserMarker('recording-stop');
+      requestStop();
+    },
+    events() {
+      return [...markerEvents];
+    },
+  };
 }
 
 export async function runManualCapturePoc(argv: string[], deps: ManualCapturePocDeps = {}): Promise<ManualCapturePocResult> {
@@ -234,6 +271,9 @@ async function runElectronCaptureSession(
   });
 
   const display = electron.screen.getPrimaryDisplay();
+  const markerController = createManualMarkerController(createRecordingClock(), () => {
+    controlWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("manual-capture-stop-request"));').catch(() => undefined);
+  });
   const chunkWriter = createCaptureChunkWriter(async (bytes) => {
     await appendFile(artifacts.rawVideoPath, bytes);
   });
@@ -289,6 +329,7 @@ async function runElectronCaptureSession(
         throw new Error('First capture chunk must be reported exactly once with sequence 0.');
       }
       firstChunkMarked = true;
+      markerController.markFirstVideoFrame();
     });
     electron.ipcMain.handle('capture:append-chunk', async (_event, bytes: unknown, sequence: unknown) => {
       if (!(bytes instanceof Uint8Array) || typeof sequence !== 'number') {
@@ -361,11 +402,13 @@ async function runElectronCaptureSession(
     }
   });
 
-  logStep('registering F10 global shortcut');
-  const shortcutRegistered = electron.globalShortcut.register('F10', () => {
-    controlWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("manual-capture-stop-request"));').catch(() => undefined);
-  });
-  logStep(`F10 global shortcut registered: ${shortcutRegistered}`);
+  logStep('registering F7/F9/F10 global shortcuts');
+  const f7Registered = electron.globalShortcut.register('F7', () => markerController.recordUserMarker('recording-start'));
+  const f9Registered = electron.globalShortcut.register('F9', () => markerController.recordUserMarker('retry-start'));
+  const f10Registered = electron.globalShortcut.register('F10', () => markerController.requestStopConfirmation());
+  logStep(`F7 global shortcut registered: ${f7Registered}`);
+  logStep(`F9 global shortcut registered: ${f9Registered}`);
+  logStep(`F10 global shortcut registered: ${f10Registered}`);
 
   controlWindow.once('ready-to-show', () => {
     logStep('control window ready-to-show');
@@ -387,6 +430,8 @@ async function runElectronCaptureSession(
     electron.ipcMain.removeHandler('capture:stop');
     electron.ipcMain.removeHandler('capture:submit-checklist');
     electron.session.defaultSession.setDisplayMediaRequestHandler(null);
+    electron.globalShortcut.unregister('F7');
+    electron.globalShortcut.unregister('F9');
     electron.globalShortcut.unregister('F10');
     if (!controlWindow.isDestroyed()) {
       controlWindow.close();
