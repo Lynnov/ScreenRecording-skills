@@ -421,24 +421,20 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       if (eventLog === null || recordingClock === null) {
         throw new Error('Manual capture event log and clock were not prepared.');
       }
-      try {
-        if (windowModeEvidence === null) {
-          throw new Error('Window mode evidence was not initialized.');
-        }
-        const fixturePage = chromiumSession.page;
-        lastCaptureReport = await runElectronCaptureSession(
-          electron,
-          args,
-          artifacts,
-          matchedSource,
-          recordingClock,
-          appendRecordingEvent,
-          windowModeEvidence,
-          fixturePage,
-        );
-      } finally {
-        await finalizeEventCapture();
+      if (windowModeEvidence === null) {
+        throw new Error('Window mode evidence was not initialized.');
       }
+      const fixturePage = chromiumSession.page;
+      lastCaptureReport = await runElectronCaptureSession(
+        electron,
+        args,
+        artifacts,
+        matchedSource,
+        recordingClock,
+        appendRecordingEvent,
+        windowModeEvidence,
+        fixturePage,
+      );
     },
     async restoreWindowMode() {
       if (borderlessMode === null) return;

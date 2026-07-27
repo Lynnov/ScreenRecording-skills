@@ -80,3 +80,10 @@ test('events fixture is wired through timestamped observers and writes its repor
   assert.match(main, /args\.fixture === 'events'/);
   assert.match(main, /chromiumSession\?\.close[\s\S]*observers\?\.flush[\s\S]*writeManualEventsPocReport/);
 });
+
+test('capture defers Chromium finalization until after the outer window restore step', async () => {
+  const main = await readFile(path.join(pocDir, 'capture-main.ts'), 'utf8');
+  const startCapture = main.match(/async startCapture\(args\)[\s\S]*?\n    async restoreWindowMode\(\)/)?.[0];
+  assert.ok(startCapture, 'startCapture implementation should be present');
+  assert.doesNotMatch(startCapture, /finalizeEventCapture/);
+});
