@@ -704,8 +704,11 @@ function buildRecordingManifest(input: {
     firstVideoFrameSessionTimeMs: input.firstVideoFrameSessionTimeMs,
     attempts: [],
     clockStatus: drift.status,
-    maxObservedDriftMs: drift.maxObservedDriftMs,
-    maxAllowedDriftMs: drift.maxAllowedDriftMs,
+    slopePpm: drift.slopePpm,
+    maxResidualMs: drift.maxResidualMs,
+    maxAllowedResidualMs: drift.maxAllowedResidualMs,
+    ffprobeDurationDeltaMs: drift.ffprobeDurationDeltaMs,
+    maxAllowedFfprobeDurationDeltaMs: drift.maxAllowedFfprobeDurationDeltaMs,
     captureComplete: input.captureComplete && drift.status === 'ok',
   };
 }

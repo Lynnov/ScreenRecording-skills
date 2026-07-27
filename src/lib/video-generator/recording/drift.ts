@@ -2,10 +2,11 @@ import type { CaptureClockSample } from './types.js';
 
 export interface DriftAnalysis {
   status: 'ok' | 'drift-detected';
-  maxObservedDriftMs: number;
-  maxAllowedDriftMs: number;
   slopePpm: number;
+  maxResidualMs: number;
+  maxAllowedResidualMs: number;
   ffprobeDurationDeltaMs: number;
+  maxAllowedFfprobeDurationDeltaMs: number;
 }
 
 export function analyzeClockDrift(
@@ -14,10 +15,11 @@ export function analyzeClockDrift(
 ): DriftAnalysis {
   const fail = (observed = Number.POSITIVE_INFINITY): DriftAnalysis => ({
     status: 'drift-detected',
-    maxObservedDriftMs: observed,
-    maxAllowedDriftMs: Number.isFinite(ffprobeDurationMs) ? Math.max(250, ffprobeDurationMs * 0.00015) : 250,
     slopePpm: Number.NaN,
+    maxResidualMs: observed,
+    maxAllowedResidualMs: Number.isFinite(ffprobeDurationMs) ? Math.max(250, ffprobeDurationMs * 0.00015) : 250,
     ffprobeDurationDeltaMs: Number.NaN,
+    maxAllowedFfprobeDurationDeltaMs: 250,
   });
 
   if (samples.length < 3 || !Number.isFinite(ffprobeDurationMs)) {
@@ -53,15 +55,27 @@ export function analyzeClockDrift(
   const last = samples.at(-1)!;
   const mediaDurationMs = last.mediaTimeMs - originMediaMs;
   const ffprobeDurationDeltaMs = Math.abs(ffprobeDurationMs - mediaDurationMs);
-  const maxObservedDriftMs = Math.max(maxResidualMs, ffprobeDurationDeltaMs);
-  const maxAllowedDriftMs = Math.max(250, ffprobeDurationMs * 0.00015);
+  const maxAllowedResidualMs = Math.max(250, ffprobeDurationMs * 0.00015);
+  const mediaIntervals = samples.slice(1).map((sample, index) =>
+    sample.mediaTimeMs - samples[index]!.mediaTimeMs);
+  if (mediaIntervals.some((interval) => interval <= 0)) {
+    return fail();
+  }
+  const maxAllowedFfprobeDurationDeltaMs = Math.max(
+    250,
+    percentile95(mediaIntervals) + (2 * 1000 / 30),
+  );
 
   return {
-    status: maxObservedDriftMs <= maxAllowedDriftMs ? 'ok' : 'drift-detected',
-    maxObservedDriftMs,
-    maxAllowedDriftMs,
+    status: maxResidualMs <= maxAllowedResidualMs
+      && ffprobeDurationDeltaMs <= maxAllowedFfprobeDurationDeltaMs
+      ? 'ok'
+      : 'drift-detected',
     slopePpm: (slope - 1) * 1_000_000,
+    maxResidualMs,
+    maxAllowedResidualMs,
     ffprobeDurationDeltaMs,
+    maxAllowedFfprobeDurationDeltaMs,
   };
 }
 
@@ -73,4 +87,9 @@ function isFiniteSample(sample: CaptureClockSample): boolean {
 
 function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function percentile95(values: number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)]!;
 }

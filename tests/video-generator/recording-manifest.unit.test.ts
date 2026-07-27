@@ -26,8 +26,11 @@ const manifest: RecordingManifest = {
   firstVideoFrameSessionTimeMs: 10,
   attempts: [],
   clockStatus: 'ok',
-  maxObservedDriftMs: 5,
-  maxAllowedDriftMs: 250,
+  slopePpm: 1,
+  maxResidualMs: 5,
+  maxAllowedResidualMs: 250,
+  ffprobeDurationDeltaMs: 20,
+  maxAllowedFfprobeDurationDeltaMs: 316,
   captureComplete: true,
 };
 

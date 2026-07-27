@@ -49,7 +49,10 @@ export interface RecordingManifest {
   firstVideoFrameSessionTimeMs: number | null;
   attempts: RecordingAttempt[];
   clockStatus: 'ok' | 'drift-detected';
-  maxObservedDriftMs: number;
-  maxAllowedDriftMs: number;
+  slopePpm: number;
+  maxResidualMs: number;
+  maxAllowedResidualMs: number;
+  ffprobeDurationDeltaMs: number;
+  maxAllowedFfprobeDurationDeltaMs: number;
   captureComplete: boolean;
 }

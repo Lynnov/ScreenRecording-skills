@@ -5,19 +5,21 @@ import { analyzeClockDrift } from '../../src/lib/video-generator/recording/drift
 test('detects residual or duration drift above the duration-scaled threshold', () => {
   const ok = analyzeClockDrift([
     { sessionTimeMs: 0, videoTimeMs: 0, mediaTimeMs: 0 },
-    { sessionTimeMs: 900_000, videoTimeMs: 900_000, mediaTimeMs: 900_090 },
-    { sessionTimeMs: 1_800_000, videoTimeMs: 1_800_000, mediaTimeMs: 1_800_180 },
-  ], 1_800_180);
+    { sessionTimeMs: 250, videoTimeMs: 250, mediaTimeMs: 250.02 },
+    { sessionTimeMs: 500, videoTimeMs: 500, mediaTimeMs: 500.04 },
+    { sessionTimeMs: 750, videoTimeMs: 750, mediaTimeMs: 750.06 },
+  ], 1000);
   assert.equal(ok.status, 'ok');
-  assert.ok(ok.maxObservedDriftMs <= ok.maxAllowedDriftMs);
+  assert.ok(ok.maxResidualMs <= ok.maxAllowedResidualMs);
 
   const bad = analyzeClockDrift([
     { sessionTimeMs: 0, videoTimeMs: 0, mediaTimeMs: 0 },
-    { sessionTimeMs: 900_000, videoTimeMs: 900_000, mediaTimeMs: 900_100 },
-    { sessionTimeMs: 1_800_000, videoTimeMs: 1_800_000, mediaTimeMs: 1_800_500 },
-  ], 1_801_000);
+    { sessionTimeMs: 250, videoTimeMs: 250, mediaTimeMs: 250 },
+    { sessionTimeMs: 500, videoTimeMs: 500, mediaTimeMs: 500 },
+    { sessionTimeMs: 750, videoTimeMs: 750, mediaTimeMs: 750 },
+  ], 1400);
   assert.equal(bad.status, 'drift-detected');
-  assert.ok(bad.maxObservedDriftMs > bad.maxAllowedDriftMs);
+  assert.ok(bad.ffprobeDurationDeltaMs > bad.maxAllowedFfprobeDurationDeltaMs);
 });
 
 test('fails closed when drift samples are insufficient or invalid', () => {
@@ -32,4 +34,26 @@ test('fails closed when drift samples are insufficient or invalid', () => {
     { sessionTimeMs: 1, videoTimeMs: 1, mediaTimeMs: Number.NaN },
     { sessionTimeMs: 2, videoTimeMs: 2, mediaTimeMs: 2 },
   ], 2).status, 'drift-detected');
+});
+
+test('separates stable clock regression from normal final chunk muxing delta', () => {
+  const sampleCount = 76;
+  const mediaDurationMs = 20_226.436;
+  const intervalMs = mediaDurationMs / (sampleCount - 1);
+  const samples = Array.from({ length: sampleCount }, (_, index) => {
+    const videoTimeMs = intervalMs * index;
+    return {
+      sessionTimeMs: 23_514 + videoTimeMs,
+      videoTimeMs,
+      mediaTimeMs: videoTimeMs * 1.000001131,
+    };
+  });
+
+  const result = analyzeClockDrift(samples, 20_500);
+
+  assert.equal(result.status, 'ok');
+  assert.ok(result.maxResidualMs < 2);
+  assert.ok(Math.abs(result.slopePpm) < 5);
+  assert.ok(Math.abs(result.ffprobeDurationDeltaMs - 273.541) < 0.01);
+  assert.ok(result.ffprobeDurationDeltaMs <= result.maxAllowedFfprobeDurationDeltaMs);
 });
