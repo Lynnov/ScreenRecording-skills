@@ -26,8 +26,10 @@ test('accepts red green and blue marker pixels within one frame', async () => {
       ],
       runCommand: async (_command, args) => {
         if (args.at(-1) !== '-') return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+        assert.ok(args.includes('crop=2:2:120:120'));
+        const color = colors[rawIndex++]!;
         return {
-          stdout: Buffer.from(colors[rawIndex++]!),
+          stdout: Buffer.from([...color, ...color, ...color, ...color]),
           stderr: Buffer.alloc(0),
         };
       },
@@ -59,7 +61,9 @@ test('returns failed evidence for missing timestamps wrong colors and ffmpeg err
       runCommand: async (_command, args) => {
         if (args.includes('15.000')) throw new Error('ffmpeg failed');
         return {
-          stdout: args.at(-1) === '-' ? Buffer.from([120, 120, 120]) : Buffer.alloc(0),
+          stdout: args.at(-1) === '-'
+            ? Buffer.from(Array.from({ length: 4 }, () => [120, 120, 120]).flat())
+            : Buffer.alloc(0),
           stderr: Buffer.alloc(0),
         };
       },

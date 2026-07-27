@@ -80,17 +80,13 @@ export async function collectMarkerEvidence(input: {
           '-hide_banner', '-loglevel', 'error',
           '-ss', timestamp, '-i', input.videoPath,
           '-frames:v', '1',
-          '-vf', `crop=1:1:${center.x}:${center.y}`,
+          '-vf', `crop=2:2:${center.x}:${center.y}`,
           '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-',
         ]);
-        if (pixel.stdout.length !== 3) {
-          throw new Error(`Expected 3 RGB bytes, received ${pixel.stdout.length}.`);
+        if (pixel.stdout.length !== 12) {
+          throw new Error(`Expected 12 RGB bytes, received ${pixel.stdout.length}.`);
         }
-        const rgb: [number, number, number] = [
-          pixel.stdout[0]!,
-          pixel.stdout[1]!,
-          pixel.stdout[2]!,
-        ];
+        const rgb = averageRgbPixels(pixel.stdout);
         samples.push({
           frameOffset,
           atMs,
@@ -134,6 +130,17 @@ export async function collectMarkerEvidence(input: {
   }
 
   return evidence;
+}
+
+function averageRgbPixels(pixels: Buffer): [number, number, number] {
+  const totals = [0, 0, 0];
+  for (let offset = 0; offset < pixels.length; offset += 3) {
+    totals[0] += pixels[offset]!;
+    totals[1] += pixels[offset + 1]!;
+    totals[2] += pixels[offset + 2]!;
+  }
+  const pixelCount = pixels.length / 3;
+  return totals.map((total) => Math.round(total / pixelCount)) as [number, number, number];
 }
 
 function matchesMarkerColor(type: ClockMarkerType, rgb: [number, number, number]): boolean {
