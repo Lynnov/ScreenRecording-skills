@@ -137,6 +137,9 @@ export function validateEditPlan(
   if (!Array.isArray(input.segments)) {
     fail('segments', 'must be an array');
   }
+  if (input.segments.length === 0) {
+    fail('segments', 'must be a non-empty array');
+  }
   const segments = input.segments.map((segment, index) => (
     validateSegment(segment, `segments[${index}]`, sourceById)
   ));

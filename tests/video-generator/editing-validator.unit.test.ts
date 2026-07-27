@@ -117,6 +117,12 @@ test('rejects duplicate segment and source ids and empty clips', () => {
   rejects(/sources\[1\]\.id/, () => {}, [sources[0]!, { ...sources[1]!, id: 'original' }]);
 });
 
+test('rejects an edit plan with no segments', () => {
+  rejects(/segments/, (plan) => {
+    plan.segments = [];
+  });
+});
+
 test('rejects a canvas other than exactly 1920 by 1080 at 30fps', () => {
   for (const [field, value] of [
     ['width', 1280],
