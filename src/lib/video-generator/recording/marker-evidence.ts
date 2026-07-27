@@ -73,12 +73,12 @@ export async function collectMarkerEvidence(input: {
       try {
         await input.runCommand('ffmpeg', [
           '-hide_banner', '-loglevel', 'error', '-y',
-          '-ss', timestamp, '-i', input.videoPath,
+          '-i', input.videoPath, '-ss', timestamp,
           '-frames:v', '1', framePath,
         ]);
         const pixel = await input.runCommand('ffmpeg', [
           '-hide_banner', '-loglevel', 'error',
-          '-ss', timestamp, '-i', input.videoPath,
+          '-i', input.videoPath, '-ss', timestamp,
           '-frames:v', '1',
           '-vf', `crop=2:2:${center.x}:${center.y}`,
           '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-',

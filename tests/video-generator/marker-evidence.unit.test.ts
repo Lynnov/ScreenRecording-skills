@@ -25,6 +25,7 @@ test('accepts red green and blue marker pixels within one frame', async () => {
         { type: 'recording-stop', videoTimeMs: 15000 },
       ],
       runCommand: async (_command, args) => {
+        assert.ok(args.indexOf('-i') < args.indexOf('-ss'));
         if (args.at(-1) !== '-') return { stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
         assert.ok(args.includes('crop=2:2:120:120'));
         const color = colors[rawIndex++]!;
