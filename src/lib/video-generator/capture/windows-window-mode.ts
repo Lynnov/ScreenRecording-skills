@@ -70,6 +70,9 @@ public static class NativeWindow {
 
   [DllImport("user32.dll", SetLastError=true)]
   public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+  [DllImport("dwmapi.dll")]
+  public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
 }
 "@
 `;
@@ -80,6 +83,7 @@ const SW_RESTORE = 9;
 const SWP_NOZORDER = 0x0004;
 const SWP_FRAMECHANGED = 0x0020;
 const MONITOR_DEFAULTTONEAREST = 0x00000002;
+const DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 const WS_CAPTION = 0x00c00000n;
 const WS_THICKFRAME = 0x00040000n;
 const WS_MINIMIZEBOX = 0x00020000n;
@@ -106,9 +110,12 @@ $work = $monitorInfo.rcWork
 if (-not [NativeWindow]::SetWindowPos($handle, [IntPtr]::Zero, $work.Left, $work.Top, $work.Right - $work.Left, $work.Bottom - $work.Top, ${SWP_NOZORDER} -bor ${SWP_FRAMECHANGED})) { throw "SetWindowPos borderless failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
 $appliedRect = New-Object NativeWindow+RECT
 if (-not [NativeWindow]::GetWindowRect($handle, [ref]$appliedRect)) { throw "GetWindowRect verify failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
+$visibleRect = New-Object NativeWindow+RECT
+$dwmResult = [NativeWindow]::DwmGetWindowAttribute($handle, ${DWMWA_EXTENDED_FRAME_BOUNDS}, [ref]$visibleRect, [Runtime.InteropServices.Marshal]::SizeOf([type][NativeWindow+RECT]))
+if ($dwmResult -ne 0) { throw "DwmGetWindowAttribute DWMWA_EXTENDED_FRAME_BOUNDS failed: $dwmResult" }
 $appliedStyle = [Int64][NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $forbiddenStyle = ${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()}
-$applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and $appliedRect.Left -eq $work.Left -and $appliedRect.Top -eq $work.Top -and $appliedRect.Right -eq $work.Right -and $appliedRect.Bottom -eq $work.Bottom
+$applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and $visibleRect.Left -eq $work.Left -and $visibleRect.Top -eq $work.Top -and $visibleRect.Right -eq $work.Right -and $visibleRect.Bottom -eq $work.Bottom
 [pscustomobject]@{
   handle = [string]${handle.toString()}
   snapshot = @{
@@ -116,7 +123,8 @@ $applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and $appliedRect.Left 
     exStyle = [string]$exStyle
     bounds = @{ left = $rect.Left; top = $rect.Top; right = $rect.Right; bottom = $rect.Bottom }
   }
-  appliedBounds = @{ left = $appliedRect.Left; top = $appliedRect.Top; right = $appliedRect.Right; bottom = $appliedRect.Bottom }
+  appliedBounds = @{ left = $visibleRect.Left; top = $visibleRect.Top; right = $visibleRect.Right; bottom = $visibleRect.Bottom }
+  rawBounds = @{ left = $appliedRect.Left; top = $appliedRect.Top; right = $appliedRect.Right; bottom = $appliedRect.Bottom }
   applied = $applied
 } | ConvertTo-Json -Depth 4 -Compress
 `;
