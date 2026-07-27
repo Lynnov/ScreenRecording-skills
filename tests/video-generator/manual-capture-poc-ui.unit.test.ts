@@ -25,6 +25,14 @@ test('capture control window updates the visible recording timer', async () => {
   assert.match(renderer, /requestAnimationFrame|setInterval/);
 });
 
+test('capture clock origin is marked immediately after MediaRecorder starts', async () => {
+  const renderer = await readFile(path.join(pocDir, 'capture-renderer.ts'), 'utf8');
+  assert.match(renderer, /recorder\.start\(250\);\s*await window\.manualCapture\.markFirstChunk\(0,\s*0\)/);
+  const dataHandler = renderer.match(/recorder\.addEventListener\('dataavailable'[\s\S]*?\n  \}\);/)?.[0];
+  assert.ok(dataHandler);
+  assert.doesNotMatch(dataHandler, /markFirstChunk/);
+});
+
 test('capture checklist explains that multi-tab continuity means recorded page content switching', async () => {
   const html = await readFile(path.join(pocDir, 'capture.html'), 'utf8');
   assert.match(html, /录像中可看到 tab-1 和 tab-2 内容连续切换/);

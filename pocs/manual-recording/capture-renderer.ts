@@ -16,7 +16,6 @@ let activeRecorder: MediaRecorder | null = null;
 let activeStream: MediaStream | null = null;
 let writeQueue = Promise.resolve();
 let sequence = 0;
-let firstChunkMarked = false;
 let stopTimer: number | undefined;
 let recordingStartedAt = 0;
 let timerAnimationFrame = 0;
@@ -57,7 +56,6 @@ async function startCapture(): Promise<void> {
   const recorder = new MediaRecorder(stream, { mimeType: pickRecorderMimeType() });
   activeRecorder = recorder;
   sequence = 0;
-  firstChunkMarked = false;
   writeQueue = Promise.resolve();
   recorder.addEventListener('dataavailable', (event) => {
     if (event.data.size === 0) {
@@ -65,15 +63,12 @@ async function startCapture(): Promise<void> {
     }
     const current = sequence++;
     writeQueue = writeQueue.then(async () => {
-      if (!firstChunkMarked) {
-        firstChunkMarked = true;
-        await window.manualCapture.markFirstChunk(0, event.timecode);
-      }
       const bytes = new Uint8Array(await event.data.arrayBuffer());
       await window.manualCapture.appendChunk(bytes, current, event.timecode);
     });
   });
   recorder.start(250);
+  await window.manualCapture.markFirstChunk(0, 0);
   startTimer();
   const durationSeconds = readDurationSeconds();
   if (durationSeconds !== null) {
