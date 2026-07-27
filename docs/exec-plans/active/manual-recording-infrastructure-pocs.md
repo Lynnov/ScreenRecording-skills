@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > 创建时间：2026-07-17  
-> 最后更新：2026-07-17  
+> 最后更新：2026-07-27
 > 设计基线：`6d46994 docs: design manual recording and agent editing`
 
 **Goal:** 在不修改现有 Playwright 自动录制流程的前提下，独立验证 Windows 指定 Chromium 窗口捕获、统一录制时钟、页面事件与虚拟鼠标、多源 Segment 预览渲染四项确定性基础设施。
@@ -43,12 +43,12 @@
 
 | Phase | 内容 | 状态 | 独立验收产物 |
 |---|---|---|---|
-| Phase 0 | POC 公共依赖、构建边界和素材目录 | 待开始 | Electron 可构建；manual POC 目录可创建 |
-| POC 1 | Windows 指定 Chromium 窗口捕获 | 待开始 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
-| POC 2 | 视频、页面事件和用户标记统一时钟 | 待开始 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
-| POC 3 | 页面事件采集和虚拟鼠标 | 待开始 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
-| POC 4 | 原始录像 + Segment 补录多源预览 | 待开始 | `edit/preview-timeline.json` + `edit/preview.mp4` |
-| Phase 5 | 全量回归、POC 结果文档和归档决策 | 待开始 | `docs/research/manual-recording-infrastructure-poc-results.md` |
+| Phase 0 | POC 公共依赖、构建边界和素材目录 | 已完成 | Electron 可构建；manual POC 目录可创建 |
+| POC 1 | Windows 指定 Chromium 窗口捕获 | 待人工桌面验收 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
+| POC 2 | 视频、页面事件和用户标记统一时钟 | 待人工桌面验收 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
+| POC 3 | 页面事件采集和虚拟鼠标 | 待人工桌面验收 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
+| POC 4 | 原始录像 + Segment 补录多源预览 | 已完成 | `edit/preview-timeline.json` + `edit/preview.mp4` |
+| Phase 5 | 全量回归、POC 结果文档和归档决策 | 进行中 | `docs/research/manual-recording-infrastructure-poc-results.md` |
 
 ## 第一份计划的明确范围
 
@@ -2107,7 +2107,7 @@ ffmpeg 解码命令退出码为 0，stderr 不得包含 non-monotonous DTS、inv
 
 在 0.50s、1.50s、2.50s、4.00s 抽取 1×1 RGB，主色依次为红、绿、黄、蓝。3.05s 和 3.30s 的 `framemd5` 完全一致，证明 3.0–3.5s 为 500ms 黄色末帧定格。短淡化用 0.95s 与 1.05s、3.45s 与 3.55s 四个靠近边界但避开精确切点的帧，与各自 Segment 中部亮度比较；边界帧应显著更暗。
 
-- [ ] **Step 7: 运行 POC 4**
+- [x] **Step 7: 运行 POC 4**
 
 Run:
 
@@ -2117,7 +2117,7 @@ npm run test:editing-poc
 
 Expected: 实际 ffmpeg/ffprobe POC PASS，临时 source 和输出在测试 finally 中删除。
 
-- [ ] **Step 8: POC 4 独立验收门槛**
+- [x] **Step 8: POC 4 独立验收门槛**
 
 ```text
 original + pickup 两个 source 均被实际引用
@@ -2129,7 +2129,7 @@ preview 为 1920×1080/30 H.264、单视频流、无音频、PTS/DTS 正常
 非法 source/range/rate/hold/transition 在调用 ffmpeg 前拒绝
 ```
 
-- [ ] **Step 9: 提交 POC 4**
+- [x] **Step 9: 提交 POC 4**
 
 ```bash
 git add src/lib/video-generator/editing/preview.ts tests/video-generator/editing-preview.unit.test.ts tests/video-generator/editing-preview-poc.test.ts
@@ -2146,7 +2146,7 @@ git commit -m "test: validate multi-source preview rendering"
 - Modify: `docs/exec-plans/active/manual-recording-infrastructure-pocs.md`
 - Modify: `docs/exec-plans/README.md`
 
-- [ ] **Step 1: 运行逻辑测试**
+- [x] **Step 1: 运行逻辑测试**
 
 Run:
 
@@ -2169,7 +2169,7 @@ npm run test:editing-poc
 
 Expected: 四项分别 PASS；任何一项失败都保持对应 Phase 为“进行中”，不得把计划移入 completed。
 
-- [ ] **Step 3: 运行现有自动录制回归**
+- [x] **Step 3: 运行现有自动录制回归**
 
 Run:
 
@@ -2187,7 +2187,7 @@ npm run video:generate -- --script examples/video-generator/basic-demo.md --dry-
 
 Expected: doctor 明确把 TTS 凭据标为缺失；preflight 成功且 `reports/preflight-report.json` 存在；结果文档记录“未执行真实 TTS/final 回归”，不得写成已验证。
 
-- [ ] **Step 4: 写 POC 结果文档**
+- [x] **Step 4: 写 POC 结果文档**
 
 `docs/research/manual-recording-infrastructure-poc-results.md` 必须逐项记录：
 
@@ -2203,14 +2203,14 @@ Expected: doctor 明确把 TTS 凭据标为缺失；preflight 成功且 `reports
 
 不得写“基本可行”“看起来正常”；窗口不入镜、漂移、PTS/DTS 和画面内容必须有可复核证据。
 
-- [ ] **Step 5: 更新索引和计划状态**
+- [x] **Step 5: 更新索引和计划状态**
 
 - `docs/research/README.md` 添加 POC 结果文档。
 - `docs/exec-plans/README.md` 把本计划状态更新为“四个 POC 已完成，待正式产品实施计划”或准确失败状态。
 - 本文件的 checkbox、状态表、决策日志按实际结果更新。
 - 四个 POC 全部通过后，移动本文件到 `docs/exec-plans/completed/manual-recording-infrastructure-pocs.md`；任何 POC 未通过则留在 `active/`。
 
-- [ ] **Step 6: 检查工作区无生成产物**
+- [x] **Step 6: 检查工作区无生成产物**
 
 Run:
 
@@ -2276,6 +2276,8 @@ git commit -m "docs: record manual recording poc results"
 - 2026-07-17：统一 clock 以 main process `hrtime` 为基准，video first frame 建立 offset，MediaRecorder timecode + ffprobe 双重检测 drift。
 - 2026-07-17：short-fade 定义为 120ms 非重叠淡黑，保持 preview timeline 总时长可直接累加。
 - 2026-07-17：POC preview 无音频，显式验证单视频流、零音频流；TTS/final 音轨不在本计划范围。
+- 2026-07-27：逻辑测试 289/289、现有 Playwright 录制回归和 POC 4 通过；POC 1-3 因尚未生成真实人工录制报告而不通过验收门槛，计划继续保留在 `active/`。
+- 2026-07-27：本机缺少 `DASHSCOPE_API_KEY`；doctor 如实失败于该项，basic demo dry-run 通过，但真实 TTS 和 `final.mp4` 未验证。
 
 ## 计划完成前自检
 
@@ -2284,7 +2286,7 @@ git commit -m "docs: record manual recording poc results"
 - [ ] POC 1 覆盖指定 Chromium、同窗口多 tab、overlay 不入镜、1920×1080、F11、无边框、125%/150%。
 - [ ] POC 2 覆盖 `sessionTimeMs`、`videoTimeMs`、F7/F9/F10、30 分钟漂移。
 - [ ] POC 3 覆盖 click/input/change/scroll/navigation/tab、JSONL 追加、新 Page/刷新注入、虚拟指针不拦截。
-- [ ] POC 4 覆盖 original + pickup、trim、concat、2×、hold、fade、preview、分辨率/帧率/PTS/stream 结构。
+- [x] POC 4 覆盖 original + pickup、trim、concat、2×、hold、fade、preview、分辨率/帧率/PTS/stream 结构。
 - [ ] 所有明确排除项没有被提前实现。
 
 ### 占位符检查
