@@ -118,7 +118,9 @@ $dwmResult = [NativeWindow]::DwmGetWindowAttribute($handle, ${DWMWA_EXTENDED_FRA
 if ($dwmResult -ne 0) { throw "DwmGetWindowAttribute DWMWA_EXTENDED_FRAME_BOUNDS failed: $dwmResult" }
 $appliedStyle = [Int64][NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $forbiddenStyle = ${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()}
-$applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and [Math]::Abs($visibleRect.Left - $work.Left) -le 1 -and [Math]::Abs($visibleRect.Top - $work.Top) -le 1 -and [Math]::Abs($visibleRect.Right - $work.Right) -le 1 -and [Math]::Abs($visibleRect.Bottom - $work.Bottom) -le 1
+$styleApplied = (($appliedStyle -band $forbiddenStyle) -eq 0)
+$boundsApplied = ([Math]::Abs($visibleRect.Left - $work.Left) -le 1) -and ([Math]::Abs($visibleRect.Top - $work.Top) -le 1) -and ([Math]::Abs($visibleRect.Right - $work.Right) -le 1) -and ([Math]::Abs($visibleRect.Bottom - $work.Bottom) -le 1)
+$applied = $styleApplied -and $boundsApplied
 [pscustomobject]@{
   handle = [string]${handle.toString()}
   snapshot = @{
@@ -128,6 +130,7 @@ $applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and [Math]::Abs($visib
   }
   appliedBounds = @{ left = $visibleRect.Left; top = $visibleRect.Top; right = $visibleRect.Right; bottom = $visibleRect.Bottom }
   rawBounds = @{ left = $appliedRect.Left; top = $appliedRect.Top; right = $appliedRect.Right; bottom = $appliedRect.Bottom }
+  appliedStyle = [string]$appliedStyle
   applied = $applied
 } | ConvertTo-Json -Depth 4 -Compress
 `;
