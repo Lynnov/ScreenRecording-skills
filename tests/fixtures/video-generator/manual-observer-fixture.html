@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>Manual Observer Fixture</title></head>
+<body>
+  <main>
+    <button id="click-target" type="button">点我</button>
+    <input id="text-input" aria-label="姓名" name="name">
+    <select id="select-target" aria-label="选项"><option>一</option><option>二</option></select>
+    <button id="push-state" type="button">pushState</button>
+    <button id="replace-form" type="button">替换表单</button>
+    <div id="scroll-box" style="height:80px;overflow:auto;border:1px solid #999">
+      <div style="height:400px">滚动区域</div>
+    </div>
+  </main>
+  <script>
+    document.querySelector('#push-state').addEventListener('click', () => history.pushState({ page: 'next' }, '', '#next'));
+    document.querySelector('#replace-form').addEventListener('click', () => {
+      document.querySelector('#text-input').outerHTML = '<input id="text-input" aria-label="姓名" name="name" value="replaced">';
+    });
+  </script>
+</body>
+</html>
