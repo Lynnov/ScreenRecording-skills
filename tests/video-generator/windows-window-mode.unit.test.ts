@@ -20,6 +20,7 @@ test('builds encoded PowerShell commands with a restorable snapshot', () => {
   assert.match(enable.decodedScript, /ShowWindow\(\$handle,\s*9\)[\s\S]*SetWindowLongPtr64/);
   assert.match(enable.decodedScript, /appliedStyle\s*=\s*\[string\]\$appliedStyle/);
   assert.match(enable.decodedScript, /\$styleApplied[\s\S]*\$boundsApplied[\s\S]*\$applied\s*=\s*\$styleApplied\s*-and\s*\$boundsApplied/);
+  assert.match(enable.decodedScript, /\[int\]\$leftDelta[\s\S]*-ge -1[\s\S]*-le 1/);
 
   const restore = buildRestoreWindowCommand(102n, {
     style: 13565952n,
@@ -57,7 +58,6 @@ test('applies a verified borderless mode and restores its complete snapshot', as
   assert.equal(mode.snapshot.style, 13565952n);
   assert.equal(mode.snapshot.exStyle, 256n);
   assert.deepEqual(mode.appliedBounds, { left: 0, top: 0, right: 1920, bottom: 1040 });
-  assert.match(calls[0]!.decodedScript, /\[Math\]::Abs/);
   assert.match(calls[0]!.decodedScript, /-le 1/);
 
   await restoreBorderlessWindowMode(mode, async (command) => {

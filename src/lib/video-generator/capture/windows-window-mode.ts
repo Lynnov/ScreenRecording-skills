@@ -119,7 +119,11 @@ if ($dwmResult -ne 0) { throw "DwmGetWindowAttribute DWMWA_EXTENDED_FRAME_BOUNDS
 $appliedStyle = [Int64][NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $forbiddenStyle = ${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()}
 $styleApplied = (($appliedStyle -band $forbiddenStyle) -eq 0)
-$boundsApplied = ([Math]::Abs($visibleRect.Left - $work.Left) -le 1) -and ([Math]::Abs($visibleRect.Top - $work.Top) -le 1) -and ([Math]::Abs($visibleRect.Right - $work.Right) -le 1) -and ([Math]::Abs($visibleRect.Bottom - $work.Bottom) -le 1)
+[int]$leftDelta = $visibleRect.Left - $work.Left
+[int]$topDelta = $visibleRect.Top - $work.Top
+[int]$rightDelta = $visibleRect.Right - $work.Right
+[int]$bottomDelta = $visibleRect.Bottom - $work.Bottom
+$boundsApplied = (($leftDelta -ge -1) -and ($leftDelta -le 1)) -and (($topDelta -ge -1) -and ($topDelta -le 1)) -and (($rightDelta -ge -1) -and ($rightDelta -le 1)) -and (($bottomDelta -ge -1) -and ($bottomDelta -le 1))
 $applied = $styleApplied -and $boundsApplied
 [pscustomobject]@{
   handle = [string]${handle.toString()}
