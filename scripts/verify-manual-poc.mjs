@@ -5,11 +5,12 @@ const kind = process.argv[2];
 const defaults = {
   capture: { runDir: 'video-runs/manual-poc-borderless-100', test: 'tests/video-generator/manual-window-capture-poc.test.ts' },
   clock: { runDir: 'video-runs/manual-clock-markers', test: 'tests/video-generator/manual-clock-poc.test.ts' },
+  'clock-long': { runDir: 'video-runs/manual-clock-30m', test: 'tests/video-generator/manual-clock-long-poc.test.ts' },
   events: { runDir: 'video-runs/manual-events-poc', test: 'tests/video-generator/manual-events-poc.test.ts' },
 };
 
 if (!(kind in defaults)) {
-  console.error('Usage: node scripts/verify-manual-poc.mjs capture|clock|events');
+  console.error('Usage: node scripts/verify-manual-poc.mjs capture|clock|clock-long|events');
   process.exit(2);
 }
 

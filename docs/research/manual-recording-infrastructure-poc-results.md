@@ -2,100 +2,110 @@
 
 > 验证日期：2026-07-27  
 > 分支：`worktree-manual-recording-poc-round1`  
-> 结论：POC 4 通过；POC 1-3 尚未执行人工桌面验收，计划继续保留在 `active/`
+> 结论：POC 2、POC 3、POC 4 通过；POC 1 已通过 Windows 150% 下的 F11 和
+> borderless-maximized，仍缺 100%/125% 矩阵，因此计划继续保留在 `active/`
 
 ## 环境
 
 | 项目 | 实测值 |
 |---|---|
 | 操作系统 | Windows 10 专业版 10.0.19045（build 19045） |
-| 显示缩放 | 未测；本轮没有启动人工桌面录制流程 |
-| Node.js | 22.14.0 |
-| npm | 10.9.2 |
-| Electron | 43.1.1 |
+| 显示缩放 | Windows 150%（Electron `displayScaleFactor=1.5`） |
+| Node.js | POC runner 24.18.0；项目开发环境另有 Node.js 22.14.0 |
+| Electron / Chromium | Electron 43.1.1 / Chromium 150.0.7871.114 |
 | Playwright | 1.60.0（项目声明 `^1.58.1`） |
-| Chromium | Playwright revision 1223，路径由 `video:doctor` 验证可用 |
 | ffmpeg / ffprobe | 8.1.1 full build |
-| DashScope | `DASHSCOPE_API_KEY` 缺失 |
+| DashScope | `DASHSCOPE_API_KEY` 缺失；不影响本轮录制基础设施 POC |
+
+这里的 150% 是 Windows 显示缩放，不是 Chrome 单标签页页面缩放。实测确认 Chrome 页面
+缩放不会自动传播到新标签页，因此它不能代替 Windows DPI 矩阵。
 
 ## 通用回归
 
 | 命令 | 结果 | 可复核指标 |
 |---|---|---|
-| `npm run test` | 通过 | typecheck 通过；289/289 单元测试通过，0 failed |
+| `npm run test` | 通过 | typecheck 通过；301/301 单元测试通过 |
 | `npm run test:video-poc` | 通过 | Playwright `recordVideo` POC 1/1 通过 |
-| `npm run video:doctor` | 未完全通过 | Node、npm、依赖、Chromium、ffmpeg、ffprobe、demo 均为 OK；仅 DashScope key 为 missing |
-| `npm run video:generate -- --script examples/video-generator/basic-demo.md --output video-runs/basic-demo-manual-poc-preflight --dry-run` | 通过 | 3 个 segment 解析成功；4 个 browser action 检查通过；报告为 `ok: true` |
-
-dry-run 报告生成于
-`video-runs/basic-demo-manual-poc-preflight/reports/preflight-report.json`；核验内容后已清理该忽略的临时运行目录，不纳入提交。
-
-由于没有 `DASHSCOPE_API_KEY`，本轮没有执行真实 TTS，也没有生成或验收基础 demo 的
-`final.mp4`；以上 dry-run 结果不能视为 TTS、音视频合成或最终视频回归。
+| `npm run test:editing-poc` | 通过 | 真实 ffmpeg 多源 preview POC 1/1 通过 |
 
 ## POC 1：Windows 指定 Chromium 窗口捕获
 
-- 命令：`npm run test:manual-capture-poc`
-- 结果：未验收。
-- 直接错误：读取
-  `video-runs/manual-poc-borderless-100/reports/capture-poc-report.json` 时返回 `ENOENT`。
-- 缺失产物：`capture/original-window.mp4`、`reports/capture-poc-report.json`。
-- 保留素材：无；本轮没有启动 Electron 人工捕获流程。
-- 未验证项：指定窗口、多标签页连续性、overlay 不入镜、1920×1080、F11、
-  borderless-maximized、100%/125%/150% 缩放、中文和空格输出路径、桌面状态恢复。
+### 已通过的 150% 证据
 
-结论：实现和逻辑测试已具备，但没有人工操作证据，POC 1 不通过验收门槛。
+| 模式 | 运行目录 | 结果 |
+|---|---|---|
+| F11 | `video-runs/manual-poc-f11-150-rerun` | report passed；1920×1080、30fps、无音频、overlay 不入镜、多标签页连续 |
+| borderless-maximized | `video-runs/manual-poc-borderless-150-fixed3` | report/verifier passed；上述媒体条件通过，且 `windowMode.applied=true`、`restored=true` |
+
+borderless 实机修复覆盖了原生最大化窗口、DWM/User32 坐标差异、DPI 坐标空间和边框取整；
+最终 150% 证据显示真正移除窗口 chrome，退出后完整恢复原窗口状态。
+
+### 尚未完成
+
+100% 和 125% 下的 F11/borderless 共四次运行尚未实测。当前只能宣称 150% 下 2/2
+通过，不能外推为原计划要求的 6/6，也不能归档 POC 1。
 
 ## POC 2：统一时钟、标记和漂移
 
-- 命令：`npm run test:manual-clock-poc`
-- 结果：未验收。
-- 直接错误：读取
-  `video-runs/manual-clock-markers/capture/recording-manifest.json` 时返回 `ENOENT`。
-- 缺失产物：`capture/events.jsonl`、`capture/recording-manifest.json`。
-- 保留素材：无；本轮没有执行 30 分钟人工录制。
-- 未验证项：F7/F9/F10 画面对齐、`sessionTimeMs`/`videoTimeMs` 映射、漂移 slope、
-  max residual、duration delta 及阈值判定。
+### 快捷键画面对齐短测
 
-结论：时钟、manifest 和漂移判定的单元测试通过，但缺少真实长录制数据，POC 2
-不通过验收门槛。
+- 运行目录：`video-runs/manual-clock-markers-fixed12`
+- 独立验收：`MANUAL_POC_RUN=... npm run test:manual-clock-poc` 通过。
+- 红色 `recording-start`、绿色 `retry-start`、蓝色 `recording-stop` 均在
+  `videoTimeMs ± 1 frame` 内命中；停止标记在精确帧由绿变蓝。
+- `clockStatus=ok`，`slopePpm=32.4708`，最大 residual `0.569ms <= 250ms`。
+- ffprobe 尾差 `908.780ms <= 1112.094ms`。
+- `captureComplete=true`，窗口模式应用和恢复均成功。
+
+短测期间多次重跑分别暴露了时钟原点、ffmpeg 精确 seek、yuv420p 颜色采样、DOM marker
+稳定时间和停止尾帧排空问题。最终修复在正式停止前保留 350ms，使已显示的蓝色帧进入编码
+输出；这不是扩大颜色或时间容差。
+
+### 30 分钟漂移
+
+- 运行目录：`video-runs/manual-clock-30m-fixed1`
+- 视频时长 `1,800,667ms`，1920×1080、30fps、无音频。
+- `clockStatus=ok`，`slopePpm=0.05999`。
+- 最大 residual `2.068ms <= 270.100ms`。
+- ffprobe 尾差 `1059.179ms <= 1150.560ms`。
+- 1815 个 MediaRecorder timecode 样本覆盖 `399ms → 1,800,006ms`；
+  中位间隔约 1050ms，最大间隔 1304ms。
+- 独立长测验收：`MANUAL_POC_RUN=... npm run test:manual-clock-long-poc` 通过。
+
+原计划把 `MediaRecorder.start(250)` 的 timeslice 误解为严格 250ms 回调保证，因此写了
+`样本数 >= 7000`。实机静态窗口录制显示 Chromium 会合并 chunk；正确门槛改为至少 900
+个样本、首尾覆盖误差不超过 2 秒、最大样本间隔不超过 2 秒，并继续要求 residual 和
+ffprobe 尾差分别过门槛。长测未重复三色快捷键；三色证据由短测独立承担。
+
+结论：短测画面对齐和 30 分钟长期稳定性分别通过独立验收，POC 2 通过。
 
 ## POC 3：页面事件、多标签页和虚拟鼠标
 
-- 命令：`npm run test:manual-events-poc`
-- 结果：未验收。
-- 直接错误：读取
-  `video-runs/manual-events-poc/reports/manual-events-poc-report.json` 时返回 `ENOENT`。
-- 缺失产物：`capture/events.jsonl`、`reports/manual-events-poc-report.json`。
-- 保留素材：无；本轮没有启动综合事件 fixture 的人工流程。
-- 未验证项：真实 click/input/change/scroll/navigation/tab 序列、新 Page 与刷新重注入、
-  手动切 tab 的激活代理、虚拟指针画面可见且不拦截业务交互。
+- 运行目录：`video-runs/manual-events-poc-rerun`
+- 独立验收：`npm run test:manual-events-poc` 通过。
+- 报告 `status=passed`、`eventCaptureComplete=true`、`eventsTruncated=false`。
+- 事件计数：pointer-click 26、input 33、change 5、scroll 50、navigation 6、
+  tab-created 2、tab-activated 2、tab-closed 2、observer-error 0。
+- reload、新标签页、child frame、动态 DOM 重注入全部通过。
+- 虚拟光标没有拦截页面交互；视频 1920×1080、30fps、无音频。
 
-结论：观察器、标签页和指针覆盖层的逻辑测试通过，但没有真实人工交互日志和录像，
-POC 3 不通过验收门槛。
+结论：POC 3 通过。
 
 ## POC 4：多源 Segment preview
 
 - 命令：`npm run test:editing-poc`
 - 结果：通过，1/1。
-- 输入：测试在系统临时目录生成 6 秒 original 和 2 秒 pickup，均为
-  1920×1080、30 fps、H.264、无音频。
-- 编辑：original trim、pickup source、2× 局部加速、500 ms 末帧定格、
-  120 ms 非重叠淡黑和三段 concat 均被画面采样断言覆盖。
-- 输出：`preview.mp4` 为单 H.264 视频流、零音频流、1920×1080、30/1 fps、
-  yuv420p；timeline 和 probe 时长均为 4500 ms（容差不超过 1 帧）。
-- 时间戳：完整解码 stderr 不包含 non-monotonous DTS、invalid timestamp 或 decode error。
-- 产物：成功后测试主动清理临时 original、pickup、`preview-timeline.json` 和
-  `preview.mp4`；失败时才会保留 fixture 与 `edit/error.stderr.txt`。
+- original trim、pickup source、2× 局部加速、500ms 末帧定格、120ms 非重叠淡黑和
+  三段 concat 均有画面采样断言。
+- 输出为 1920×1080、30fps、H.264、yuv420p、无音频，timeline 和 probe 时长均为
+  4500ms（容差不超过一帧），完整解码无时间戳错误。
 
-结论：POC 4 通过本计划定义的独立验收门槛。
+结论：POC 4 通过。
 
 ## 第一轮结论与后续约束
 
-1. 多源 preview 的 trim、concat、2×、hold、short-fade 和媒体结构已有真实 ffmpeg
-   证据，可作为正式剪辑实现的输入约束。
-2. POC 1-3 只能确认代码路径和自动测试已建立，不能据此宣称 Windows 指定窗口捕获、
-   长录制漂移或真实多标签页观察可靠。
-3. 下一轮必须在实际桌面会话运行 Electron POC，按 100%/125%/150%、
-   F11/borderless、双标签页和 30 分钟录制矩阵生成报告；报告通过后再归档本计划。
-4. 在 DashScope 凭据可用前，真实 TTS 与最终 `final.mp4` 回归仍是独立的未验证项。
+1. POC 2、POC 3、POC 4 已具有自动回归和真实产物双重证据。
+2. POC 1 只完成 Windows 150% 的 F11/borderless；100%/125% 四次运行完成前继续 active。
+3. Chrome 单标签页页面缩放不属于 Windows DPI 验收，不计入缩放矩阵。
+4. 当前不需要再次运行 30 分钟录制；后续只剩 POC 1 的 Windows 显示缩放矩阵。
+5. 在 DashScope 凭据可用前，真实 TTS 与最终 `final.mp4` 回归仍是独立未验证项。

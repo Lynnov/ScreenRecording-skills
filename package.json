@@ -13,6 +13,7 @@
     "poc:manual-capture": "npm run build:manual-poc && node scripts/run-manual-capture-poc.mjs",
     "test:manual-capture-poc": "node scripts/verify-manual-poc.mjs capture",
     "test:manual-clock-poc": "node scripts/verify-manual-poc.mjs clock",
+    "test:manual-clock-long-poc": "node scripts/verify-manual-poc.mjs clock-long",
     "test:manual-events-poc": "node scripts/verify-manual-poc.mjs events",
     "test:editing-poc": "tsx --test tests/video-generator/editing-preview-poc.test.ts",
     "video:generate": "tsx src/cli/video-generator.ts",

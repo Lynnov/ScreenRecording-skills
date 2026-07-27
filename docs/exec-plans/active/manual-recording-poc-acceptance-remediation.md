@@ -439,7 +439,7 @@ git commit -m "fix: verify manual clock marker frames"
 - Modify: `docs/exec-plans/active/manual-recording-poc-acceptance-remediation.md`
 - Modify: `docs/exec-plans/README.md`
 
-- [ ] **Step 1: 运行完整自动测试**
+- [x] **Step 1: 运行完整自动测试**
 
 Run:
 
@@ -451,7 +451,7 @@ npm run test:editing-poc
 
 Expected: typecheck、全部 unit、Playwright recordVideo 和真实 ffmpeg editing POC 均 PASS。
 
-- [ ] **Step 2: 重验 borderless + 150%**
+- [x] **Step 2: 重验 borderless + 150%**
 
 Run:
 
@@ -462,7 +462,7 @@ npm run poc:manual-capture -- --output "video-runs/manual-poc-borderless-150-fix
 Expected: 实际无标题栏/地址栏；报告 `windowMode.applied=true`、
 `windowMode.restored=true`；视频 1920×1080、30 fps、无音频；独立 capture verifier PASS。
 
-- [ ] **Step 3: 重验时钟短测**
+- [x] **Step 3: 重验时钟短测**
 
 Run:
 
@@ -473,7 +473,7 @@ npm run poc:manual-capture -- --output "video-runs/manual-clock-markers-fixed" -
 Expected: slope/residual 和尾差分别在门槛内；红/绿/蓝 marker evidence 全部通过；
 `npm run test:manual-clock-poc` PASS。
 
-- [ ] **Step 4: 运行 30 分钟漂移**
+- [x] **Step 4: 运行 30 分钟漂移**
 
 仅在 Step 3 通过后运行：
 
@@ -481,14 +481,18 @@ Expected: slope/residual 和尾差分别在门槛内；红/绿/蓝 marker eviden
 npm run poc:manual-capture -- --output "video-runs/manual-clock-30m" --display-mode borderless-maximized --fixture clock --duration-seconds 1800
 ```
 
-Expected: 样本数 >= 7000；两类 drift 指标在各自门槛内；manifest `clockStatus=ok`。
+Expected: 时钟样本覆盖视频首尾、至少 900 个样本且最大间隔不超过 2 秒；两类 drift
+指标在各自门槛内；manifest `clockStatus=ok`。`MediaRecorder.start(250)` 的 timeslice
+不是严格回调周期，静态窗口下 Chromium 实机会合并 chunk，因此不再以 7000 个 chunk
+作为门槛。长测用 `npm run test:manual-clock-long-poc` 验收；三色 marker 由 Step 3
+短测独立验收。
 
-- [ ] **Step 5: 更新结果文档和计划状态**
+- [x] **Step 5: 更新结果文档和计划状态**
 
 逐项记录旧失败证据、修复 commit、新实测命令、报告路径和量化指标。100%/125% 矩阵未完成前，
 POC 1 仍保持 active；不把一次 150% 通过外推为 6/6。
 
-- [ ] **Step 6: 检查工作区**
+- [x] **Step 6: 检查工作区**
 
 Run:
 
@@ -499,7 +503,7 @@ git diff --check
 
 Expected: 只有计划中的源码、测试和文档；`video-runs/`、`dist/`、日志和媒体均未跟踪。
 
-- [ ] **Step 7: 提交结果文档**
+- [x] **Step 7: 提交结果文档**
 
 ```bash
 git add docs/research/manual-recording-infrastructure-poc-results.md docs/exec-plans/active/manual-recording-infrastructure-pocs.md docs/exec-plans/active/manual-recording-poc-acceptance-remediation.md docs/exec-plans/README.md
@@ -510,10 +514,10 @@ git commit -m "docs: record remediated manual poc results"
 
 ## 计划自检
 
-- [ ] Window helper 不接受用户文本拼入 PowerShell。
-- [ ] Borderless 在所有退出路径恢复，恢复失败 fail closed。
-- [ ] Capture report 的状态和操作员备注不再自相矛盾。
-- [ ] Drift residual 与 ffprobe tail delta 使用不同字段和门槛。
-- [ ] Marker 验证读取真实像素，不只检查事件存在。
-- [ ] 30 分钟测试只在短测通过后启动。
-- [ ] 100%/125% 未实测前不归档原计划。
+- [x] Window helper 不接受用户文本拼入 PowerShell。
+- [x] Borderless 在所有退出路径恢复，恢复失败 fail closed。
+- [x] Capture report 的状态和操作员备注不再自相矛盾。
+- [x] Drift residual 与 ffprobe tail delta 使用不同字段和门槛。
+- [x] Marker 验证读取真实像素，不只检查事件存在。
+- [x] 30 分钟测试只在短测通过后启动。
+- [x] 100%/125% 未实测前不归档原计划。

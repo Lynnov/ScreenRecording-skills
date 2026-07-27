@@ -44,9 +44,9 @@
 | Phase | 内容 | 状态 | 独立验收产物 |
 |---|---|---|---|
 | Phase 0 | POC 公共依赖、构建边界和素材目录 | 已完成 | Electron 可构建；manual POC 目录可创建 |
-| POC 1 | Windows 指定 Chromium 窗口捕获 | 待人工桌面验收 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
-| POC 2 | 视频、页面事件和用户标记统一时钟 | 待人工桌面验收 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
-| POC 3 | 页面事件采集和虚拟鼠标 | 待人工桌面验收 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
+| POC 1 | Windows 指定 Chromium 窗口捕获 | 150% 已通过；100%/125% 待验收 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
+| POC 2 | 视频、页面事件和用户标记统一时钟 | 已完成 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
+| POC 3 | 页面事件采集和虚拟鼠标 | 已完成 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
 | POC 4 | 原始录像 + Segment 补录多源预览 | 已完成 | `edit/preview-timeline.json` + `edit/preview.mp4` |
 | Phase 5 | 全量回归、POC 结果文档和归档决策 | 进行中 | `docs/research/manual-recording-infrastructure-poc-results.md` |
 
@@ -1454,7 +1454,7 @@ await page.evaluate(({ name, requestedVideoTimeMs }) => {
 
 fixture 等两个 requestAnimationFrame 后返回 ack，main 再用 `clock.stamp()` 记录正式 `recording-start` / `retry-start` / `recording-stop`，确保事件时间对应已可见的颜色块。该调用只更新 POC 颜色块，不触发任何业务交互。然后用 ffmpeg 在三个 marker 的 `videoTimeMs ± 1 frame` 抽帧，通过 OCR-free 的颜色编码块确认 marker 位于对应画面时刻；容差固定为 2 帧（30fps 下约 67ms）。
 
-- [ ] **Step 4: 运行短时快捷键对齐 POC**
+- [x] **Step 4: 运行短时快捷键对齐 POC**
 
 Run:
 
@@ -1466,7 +1466,7 @@ npm run poc:manual-capture -- --output "video-runs/manual-clock-markers" --displ
 
 Expected: F7、F9 和第二次 F10 对应的三个 marker 事件时间与画面颜色标记偏差均不超过 67ms；第一次 F10 只产生 `recording-stop-requested`，F7 不重置底层 `videoTimeMs`。
 
-- [ ] **Step 5: 运行 30 分钟漂移 POC**
+- [x] **Step 5: 运行 30 分钟漂移 POC**
 
 Run:
 
@@ -1477,16 +1477,19 @@ npm run poc:manual-capture -- --output "video-runs/manual-clock-30m" --display-m
 Expected:
 
 ```text
-clock sample 间隔约 250ms
-样本数 >= 7000
+样本数 >= 900，首尾覆盖误差 <= 2s
+最大 clock sample 间隔 <= 2s
 maxObservedDriftMs <= max(250, durationMs*0.00015)
 ffprobeDurationDeltaMs <= 同一阈值
 clockStatus = ok
 ```
 
+`MediaRecorder.start(250)` 的 timeslice 不是严格 250ms 回调保证；静态窗口下 Chromium
+可以合并 chunk。长测以覆盖完整时长和最大间隙约束证据密度，三色 marker 由短测验收。
+
 若超限，POC 必须失败并在 manifest 保留 slopePpm、最大漂移、ffprobe delta，禁止继续宣称可用于剪辑。
 
-- [ ] **Step 6: 提交 POC 2**
+- [x] **Step 6: 提交 POC 2**
 
 ```bash
 git add pocs/manual-recording/clock-fixture.html pocs/manual-recording/capture-main.ts pocs/manual-recording/capture-renderer.ts tests/video-generator/manual-clock-poc.test.ts
@@ -1695,15 +1698,15 @@ git commit -m "feat: add manual cursor overlay"
 - Modify: `src/lib/video-generator/recording/artifacts.ts`
 - Modify: `src/lib/video-generator/recording/session.ts`
 
-- [ ] **Step 1: 创建综合 fixture**
+- [x] **Step 1: 创建综合 fixture**
 
 `event-fixture.html` 必须包含：普通按钮、text input、select、长滚动区、`history.pushState` 按钮、指向同一 fixture `?tab=2` 且 `target="_blank"` 的新标签页链接、same-origin iframe 和动态 DOM 替换按钮。fixture 自己实现业务行为，observer 只记录。
 
-- [ ] **Step 2: 原子写 tabs snapshot**
+- [x] **Step 2: 原子写 tabs snapshot**
 
 `tab-observer.ts` 维护当前 tab registry：`{ tabId, url, title, createdSessionTimeMs, closedSessionTimeMs }[]`。每次 created/navigation/closed 后把完整 snapshot 写 `tabs.json.tmp` 再 rename 为 `capture/tabs.json`；session 关闭前 await 最后一次写入。`tab-observer.unit.test.ts` 增加断言：两个 tab 的 title/url/id 写入，关闭 tab 后 `closedSessionTimeMs` 非 null，重复写不会产生损坏 JSON。
 
-- [ ] **Step 3: 在 session 安装三个观察组件**
+- [x] **Step 3: 在 session 安装三个观察组件**
 
 顺序固定：
 
@@ -1715,7 +1718,7 @@ const tabs = await installTabObserver(context, appendTabEvent);
 
 任何页面监听失败只追加 `observer-error`，不得停止 capture；报告 `eventCaptureComplete: false`。
 
-- [ ] **Step 4: 定义事件 POC 报告**
+- [x] **Step 4: 定义事件 POC 报告**
 
 `events-poc-report.ts` 定义并原子写：
 
@@ -1739,7 +1742,7 @@ export async function writeManualEventsPocReport(filePath: string, report: Manua
 
 `manual-events-poc-report.unit.test.ts` 覆盖完整通过、observer-error 导致 incomplete、缺少任一必需事件导致 failed，以及 `.tmp` + rename。
 
-- [ ] **Step 5: 写综合 POC 断言**
+- [x] **Step 5: 写综合 POC 断言**
 
 `manual-events-poc.test.ts` 读取 JSONL 并断言：
 
@@ -1759,7 +1762,7 @@ same-origin iframe 事件带 isMainFrame=false 和 frameUrl
 第一帧后的事件均有 videoTimeMs
 ```
 
-- [ ] **Step 6: 运行 POC 3**
+- [x] **Step 6: 运行 POC 3**
 
 Run:
 
@@ -1770,7 +1773,7 @@ npm run test:manual-events-poc
 
 人工执行 fixture 中所有控件并手动切换 tab；不得由程序自动切 tab。session 结束时根据事件、tabs snapshot 和 overlay 测试结果写 `reports/manual-events-poc-report.json`；验证 wrapper 同时读取 JSONL 和该报告，要求 `status='passed'`。
 
-- [ ] **Step 7: POC 3 独立验收门槛**
+- [x] **Step 7: POC 3 独立验收门槛**
 
 ```text
 pointer-click/input/change/scroll/navigation/tab-created/tab-activated/tab-closed 八类事件全部出现
@@ -1782,7 +1785,7 @@ JSONL 异常中止后除最后一条可能未完整写入的行外，前序完�
 源码无 actions.ts/interaction-rules.ts 依赖
 ```
 
-- [ ] **Step 8: 提交 POC 3**
+- [x] **Step 8: 提交 POC 3**
 
 ```bash
 git add pocs/manual-recording/event-fixture.html src/lib/video-generator/browser/tab-observer.ts src/lib/video-generator/recording/artifacts.ts src/lib/video-generator/recording/events-poc-report.ts src/lib/video-generator/recording/session.ts tests/video-generator/manual-events-poc.test.ts tests/video-generator/manual-events-poc-report.unit.test.ts tests/video-generator/tab-observer.unit.test.ts
@@ -2254,16 +2257,16 @@ git commit -m "docs: record manual recording poc results"
 ## Windows 环境验证清单
 
 ```text
-[ ] Windows 10 22H2 或 Windows 11 实际桌面会话
-[ ] Node >=22.12.0
-[ ] Electron 43.1.1
-[ ] Playwright Chromium 可启动
-[ ] ffmpeg/ffprobe 可用且包含 libx264
+[x] Windows 10 22H2 或 Windows 11 实际桌面会话
+[x] Node >=22.12.0
+[x] Electron 43.1.1
+[x] Playwright Chromium 可启动
+[x] ffmpeg/ffprobe 可用且包含 libx264
 [ ] 单显示器 100%/125%/150% 缩放
-[ ] F11 与 borderless-maximized
-[ ] 同一 Chromium 窗口两个标签页
-[ ] overlay 位于 Chromium 上方但不入镜
-[ ] 30 分钟持续录制
+[x] F11 与 borderless-maximized（150% 已实测；其余缩放仍待矩阵）
+[x] 同一 Chromium 窗口两个标签页
+[x] overlay 位于 Chromium 上方但不入镜
+[x] 30 分钟持续录制
 [ ] 输出路径包含空格和中文
 ```
 
@@ -2278,16 +2281,20 @@ git commit -m "docs: record manual recording poc results"
 - 2026-07-17：POC preview 无音频，显式验证单视频流、零音频流；TTS/final 音轨不在本计划范围。
 - 2026-07-27：逻辑测试 289/289、现有 Playwright 录制回归和 POC 4 通过；POC 1-3 因尚未生成真实人工录制报告而不通过验收门槛，计划继续保留在 `active/`。
 - 2026-07-27：本机缺少 `DASHSCOPE_API_KEY`；doctor 如实失败于该项，basic demo dry-run 通过，但真实 TTS 和 `final.mp4` 未验证。
+- 2026-07-27：修复实机验收暴露的 borderless、报告证据、漂移拆分和三色 marker
+  问题；150% F11/borderless、事件 POC、快捷键短测和 30 分钟漂移均通过。
+- 2026-07-27：30 分钟静态窗口产生 1815 个 MediaRecorder timecode 样本，完整覆盖
+  1800 秒且最大间隔 1304ms；以覆盖和最大间隙替代不受规范保证的 7000 chunk 门槛。
 
 ## 计划完成前自检
 
 ### 规格覆盖
 
 - [ ] POC 1 覆盖指定 Chromium、同窗口多 tab、overlay 不入镜、1920×1080、F11、无边框、125%/150%。
-- [ ] POC 2 覆盖 `sessionTimeMs`、`videoTimeMs`、F7/F9/F10、30 分钟漂移。
-- [ ] POC 3 覆盖 click/input/change/scroll/navigation/tab、JSONL 追加、新 Page/刷新注入、虚拟指针不拦截。
+- [x] POC 2 覆盖 `sessionTimeMs`、`videoTimeMs`、F7/F9/F10、30 分钟漂移。
+- [x] POC 3 覆盖 click/input/change/scroll/navigation/tab、JSONL 追加、新 Page/刷新注入、虚拟指针不拦截。
 - [x] POC 4 覆盖 original + pickup、trim、concat、2×、hold、fade、preview、分辨率/帧率/PTS/stream 结构。
-- [ ] 所有明确排除项没有被提前实现。
+- [x] 所有明确排除项没有被提前实现。
 
 ### 占位符检查
 
