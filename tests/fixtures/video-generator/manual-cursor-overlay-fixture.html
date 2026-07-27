@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>Manual Cursor Overlay Fixture</title></head>
+<body>
+  <main>
+    <button id="click-count" type="button">0</button>
+    <input id="text-input" value="">
+    <button id="reload-target" type="button">reload</button>
+  </main>
+  <script>
+    let clicks = 0;
+    document.querySelector('#click-count').addEventListener('click', () => {
+      clicks += 1;
+      document.querySelector('#click-count').textContent = String(clicks);
+    });
+  </script>
+</body>
+</html>
