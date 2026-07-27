@@ -91,3 +91,23 @@ test('shows a clock marker before stamping its formal recording event', async ()
   assert.equal(event.type, 'retry-start');
   assert.equal(event.videoTimeMs, 3);
 });
+
+test('drains the final clock marker frame before stopping the recorder', async () => {
+  const { finalizeClockStopMarker } =
+    await import('../../pocs/manual-recording/capture-main.js');
+  const order: string[] = [];
+
+  await finalizeClockStopMarker(
+    async () => {
+      order.push('marker');
+    },
+    async () => {
+      order.push('drain');
+    },
+    () => {
+      order.push('stop');
+    },
+  );
+
+  assert.deepEqual(order, ['marker', 'drain', 'stop']);
+});

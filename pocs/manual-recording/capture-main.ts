@@ -223,6 +223,16 @@ export async function recordClockFixtureMarker(
   return event;
 }
 
+export async function finalizeClockStopMarker(
+  recordMarker: () => Promise<void>,
+  drainCaptureTail: () => Promise<void>,
+  requestStop: () => void,
+): Promise<void> {
+  await recordMarker();
+  await drainCaptureTail();
+  requestStop();
+}
+
 export async function runManualCapturePoc(argv: string[], deps: ManualCapturePocDeps = {}): Promise<ManualCapturePocResult> {
   const cleanup = deps.cleanup ?? asyncNoop;
   let result: ManualCapturePocResult;
@@ -667,8 +677,15 @@ async function runElectronCaptureSession(
       markerController.requestStopConfirmation();
       return;
     }
-    void recordClockFixtureMarker(fixturePage, markerController, 'recording-stop')
-      .then(() => markerController.requestStopConfirmation(false))
+    void finalizeClockStopMarker(
+      async () => {
+        await recordClockFixtureMarker(fixturePage, markerController, 'recording-stop');
+      },
+      async () => {
+        await new Promise<void>((resolve) => setTimeout(resolve, 350));
+      },
+      () => markerController.requestStopConfirmation(false),
+    )
       .catch((error) => logStep(`clock marker recording-stop failed: ${formatError(error)}`));
   });
   logStep(`F7 global shortcut registered: ${f7Registered}`);
