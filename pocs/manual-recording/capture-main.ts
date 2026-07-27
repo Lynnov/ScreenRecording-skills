@@ -22,7 +22,14 @@ import {
   type ManualChromiumSession,
   type TimestampedObserverEventSink,
 } from '../../src/lib/video-generator/recording/session.js';
-import { writeCaptureOperatorChecklist, writeCapturePocReport, type CaptureOperatorChecklist, type CapturePocReport } from '../../src/lib/video-generator/recording/poc-report.js';
+import {
+  capturePocEvidenceErrors,
+  writeCaptureOperatorChecklist,
+  writeCapturePocReport,
+  type CaptureOperatorChecklist,
+  type CapturePocReport,
+  type CaptureWindowModeEvidence,
+} from '../../src/lib/video-generator/recording/poc-report.js';
 import { createRecordingClock, type RecordingClock } from '../../src/lib/video-generator/recording/clock.js';
 import { createEventLog } from '../../src/lib/video-generator/recording/event-log.js';
 import { analyzeClockDrift } from '../../src/lib/video-generator/recording/drift.js';
@@ -236,6 +243,8 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
   let chromiumSession: ManualChromiumSession | null = null;
   let matchedSource: DesktopCapturerSourceLike | null = null;
   let borderlessMode: AppliedBorderlessWindowMode | null = null;
+  let windowModeEvidence: CaptureWindowModeEvidence | null = null;
+  let lastCaptureReport: CapturePocReport | null = null;
   let eventLog: Awaited<ReturnType<typeof createEventLog>> | null = null;
   let recordingClock: RecordingClock | null = null;
   let observerSink: TimestampedObserverEventSink | null = null;
@@ -324,6 +333,14 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       logStep(`Chromium launched with binding title ${chromiumSession.bindingTitle}`);
       logStep('polling desktop sources for Chromium binding window');
       matchedSource = await waitForUniqueWindowSource(electron, chromiumSession.bindingTitle, 10_000);
+      windowModeEvidence = {
+        requested: args.displayMode,
+        applied: false,
+        restored: args.displayMode === 'f11' ? null : false,
+        handle: null,
+        snapshot: null,
+        errors: [],
+      };
       logStep(`source bound: ${matchedSource.name} (${matchedSource.id})`);
       logStep(`navigating Chromium to ${args.fixture} fixture`);
       await chromiumSession.navigateToFixture(args.fixture);
@@ -342,6 +359,18 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       }
       logStep(`applying borderless window mode to ${matchedSource.id}`);
       borderlessMode = await enableBorderlessWindowMode(matchedSource.id, runWindowsCommand);
+      windowModeEvidence = {
+        requested: 'borderless-maximized',
+        applied: true,
+        restored: false,
+        handle: borderlessMode.handle.toString(),
+        snapshot: {
+          style: borderlessMode.snapshot.style.toString(),
+          exStyle: borderlessMode.snapshot.exStyle.toString(),
+          bounds: borderlessMode.snapshot.bounds,
+        },
+        errors: [],
+      };
       logStep(`borderless window mode applied to handle ${borderlessMode.handle.toString()}`);
     },
     async startCapture(args) {
@@ -352,7 +381,18 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
         throw new Error('Manual capture event log and clock were not prepared.');
       }
       try {
-        await runElectronCaptureSession(electron, args, artifacts, matchedSource, recordingClock, appendRecordingEvent);
+        if (windowModeEvidence === null) {
+          throw new Error('Window mode evidence was not initialized.');
+        }
+        lastCaptureReport = await runElectronCaptureSession(
+          electron,
+          args,
+          artifacts,
+          matchedSource,
+          recordingClock,
+          appendRecordingEvent,
+          windowModeEvidence,
+        );
       } finally {
         await finalizeEventCapture();
       }
@@ -360,9 +400,29 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
     async restoreWindowMode() {
       if (borderlessMode === null) return;
       logStep(`restoring borderless window mode for handle ${borderlessMode.handle.toString()}`);
-      await restoreBorderlessWindowMode(borderlessMode, runWindowsCommand);
-      logStep('borderless window mode restored');
-      borderlessMode = null;
+      try {
+        await restoreBorderlessWindowMode(borderlessMode, runWindowsCommand);
+        if (windowModeEvidence !== null) windowModeEvidence.restored = true;
+        logStep('borderless window mode restored');
+      } catch (error) {
+        if (windowModeEvidence !== null) {
+          windowModeEvidence.restored = false;
+          windowModeEvidence.errors.push(formatError(error));
+        }
+        throw error;
+      } finally {
+        borderlessMode = null;
+        if (lastCaptureReport !== null && artifacts !== null && windowModeEvidence !== null) {
+          const updated: CapturePocReport = {
+            ...lastCaptureReport,
+            windowModeRestoreRequired: windowModeEvidence.restored !== true,
+            windowMode: windowModeEvidence,
+          };
+          updated.status = capturePocEvidenceErrors(updated).length === 0 ? 'passed' : 'failed';
+          await writeCapturePocReport(artifacts.capturePocReportPath, updated);
+          lastCaptureReport = updated;
+        }
+      }
     },
     cleanup,
   };
@@ -375,6 +435,7 @@ async function runElectronCaptureSession(
   source: DesktopCapturerSourceLike,
   recordingClock: RecordingClock,
   appendRecordingEvent: (event: RecordingEvent) => Promise<void>,
+  windowModeEvidence: CaptureWindowModeEvidence,
 ): Promise<CapturePocReport> {
   const preloadPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture-preload.cjs');
   logStep(`creating control window with preload ${preloadPath}`);
@@ -417,7 +478,8 @@ async function runElectronCaptureSession(
     video,
     overlayAlwaysOnTop: controlWindow.isAlwaysOnTop(),
     normalizedVideoStatus,
-    windowModeRestoreRequired: false,
+    windowModeRestoreRequired: args.displayMode === 'borderless-maximized' && windowModeEvidence.restored !== true,
+    windowMode: windowModeEvidence,
     evidence: {
       operatorChecklistPath: artifacts.captureOperatorChecklistPath,
       ffprobeJsonPath: artifacts.captureFfprobeJsonPath,
@@ -427,23 +489,18 @@ async function runElectronCaptureSession(
 
   const finishWithReport = async (): Promise<CapturePocReport> => {
     const errors = captureError === null ? [] : [captureError];
-    const status: CapturePocReport['status'] = video.status === 'available'
-      && normalizedVideoStatus === 'passed'
-      && checklist !== null
-      && checklist.overlayEnteredCapture === false
-      && checklist.multiTabContinuous
-      && errors.length === 0
-      ? 'passed'
-      : checklist === null
-        ? 'incomplete'
-        : 'failed';
     const report: CapturePocReport = {
       ...reportBase(),
-      status,
+      status: 'incomplete',
       overlayEnteredCapture: checklist?.overlayEnteredCapture ?? null,
       multiTabContinuous: checklist?.multiTabContinuous ?? null,
       errors,
     };
+    report.status = checklist === null
+      ? 'incomplete'
+      : capturePocEvidenceErrors(report).length === 0
+        ? 'passed'
+        : 'failed';
     await writeCapturePocReport(artifacts.capturePocReportPath, report);
     return report;
   };

@@ -18,4 +18,12 @@ test('captures the selected Chromium window on Windows', async () => {
   assert.equal(report.video.hasAudio, false);
   assert.equal(report.overlayEnteredCapture, false);
   assert.equal(report.multiTabContinuous, true);
+  assert.equal(report.windowMode.requested, report.displayMode);
+  assert.deepEqual(report.windowMode.errors, []);
+  if (report.displayMode === 'borderless-maximized') {
+    assert.equal(report.windowMode.applied, true);
+    assert.equal(report.windowMode.restored, true);
+    assert.equal(typeof report.windowMode.handle, 'string');
+    assert.ok(report.windowMode.snapshot);
+  }
 });
