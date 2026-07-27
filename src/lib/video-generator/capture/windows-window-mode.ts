@@ -101,6 +101,7 @@ $stylePtr = [NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $exStylePtr = [NativeWindow]::GetWindowLongPtr64($handle, ${GWL_EXSTYLE})
 $style = [Int64]$stylePtr
 $exStyle = [Int64]$exStylePtr
+[void][NativeWindow]::ShowWindow($handle, ${SW_RESTORE})
 $newStyle = $style -band -bnot (${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()} -bor ${WS_MINIMIZEBOX.toString()} -bor ${WS_MAXIMIZEBOX.toString()} -bor ${WS_MAXIMIZE.toString()})
 [void][NativeWindow]::SetWindowLongPtr64($handle, ${GWL_STYLE}, [IntPtr]::new($newStyle))
 $monitor = [NativeWindow]::MonitorFromWindow($handle, ${MONITOR_DEFAULTTONEAREST})

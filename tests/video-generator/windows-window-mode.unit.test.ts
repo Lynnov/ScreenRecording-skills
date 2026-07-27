@@ -17,6 +17,7 @@ test('builds encoded PowerShell commands with a restorable snapshot', () => {
   assert.match(enable.decodedScript, /DwmGetWindowAttribute/);
   assert.match(enable.decodedScript, /DWMWA_EXTENDED_FRAME_BOUNDS|,\s*9,/);
   assert.match(enable.decodedScript, /16777216/);
+  assert.match(enable.decodedScript, /ShowWindow\(\$handle,\s*9\)[\s\S]*SetWindowLongPtr64/);
 
   const restore = buildRestoreWindowCommand(102n, {
     style: 13565952n,
