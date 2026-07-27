@@ -7,6 +7,12 @@ import { promisify } from 'node:util';
 import { createCaptureChunkWriter, isValidOperatorChecklist, resolveDisplayMediaRequest } from '../../src/lib/video-generator/capture/windows-electron.js';
 import { matchUniqueWindowSource } from '../../src/lib/video-generator/capture/source-matcher.js';
 import { normalizeCapturedVideo, parseNormalizedVideoProbe } from '../../src/lib/video-generator/capture/normalize-video.js';
+import {
+  enableBorderlessWindowMode,
+  restoreBorderlessWindowMode,
+  type AppliedBorderlessWindowMode,
+  type WindowsCommand,
+} from '../../src/lib/video-generator/capture/windows-window-mode.js';
 import { assertManualRunIsWritable, createManualRunArtifacts, ensureManualRunArtifactDirs, type ManualRunArtifacts } from '../../src/lib/video-generator/recording/artifacts.js';
 import {
   createTimestampedObserverEventSink,
@@ -40,7 +46,9 @@ export interface ManualCapturePocDeps {
   platform?: NodeJS.Platform;
   prepareOutput?: (args: Required<Omit<ManualPocArgs, 'help'>>) => Promise<void>;
   bindSource?: (args: Required<Omit<ManualPocArgs, 'help'>>) => Promise<void>;
+  applyWindowMode?: (args: Required<Omit<ManualPocArgs, 'help'>>) => Promise<void>;
   startCapture?: (args: Required<Omit<ManualPocArgs, 'help'>>) => Promise<void>;
+  restoreWindowMode?: () => Promise<void>;
   cleanup?: () => Promise<void>;
 }
 
@@ -169,32 +177,49 @@ export function createManualMarkerController(
 
 export async function runManualCapturePoc(argv: string[], deps: ManualCapturePocDeps = {}): Promise<ManualCapturePocResult> {
   const cleanup = deps.cleanup ?? asyncNoop;
+  let result: ManualCapturePocResult;
+  let restoreWindowMode = false;
   try {
     const parsed = parseManualPocArgs(argv);
     if (parsed.help) {
-      return { exitCode: 0, message: USAGE };
+      result = { exitCode: 0, message: USAGE };
+    } else {
+      const normalized = normalizeArgs(parsed);
+      if ((deps.platform ?? process.platform) !== 'win32') {
+        result = { exitCode: 3, message: 'Manual capture POC only supports Windows.' };
+      } else {
+        await deps.prepareOutput?.(normalized);
+        try {
+          await deps.bindSource?.(normalized);
+        } catch (error) {
+          result = { exitCode: 4, message: formatError(error) };
+          return result;
+        }
+        try {
+          if (normalized.displayMode === 'borderless-maximized') {
+            restoreWindowMode = true;
+            await deps.applyWindowMode?.(normalized);
+          }
+          await deps.startCapture?.(normalized);
+          result = { exitCode: 0, message: 'Manual capture POC completed.' };
+        } catch (error) {
+          result = { exitCode: 5, message: formatError(error) };
+        }
+      }
     }
-    const normalized = normalizeArgs(parsed);
-    if ((deps.platform ?? process.platform) !== 'win32') {
-      return { exitCode: 3, message: 'Manual capture POC only supports Windows.' };
-    }
-    await deps.prepareOutput?.(normalized);
-    try {
-      await deps.bindSource?.(normalized);
-    } catch (error) {
-      return { exitCode: 4, message: formatError(error) };
-    }
-    try {
-      await deps.startCapture?.(normalized);
-    } catch (error) {
-      return { exitCode: 5, message: formatError(error) };
-    }
-    return { exitCode: 0, message: 'Manual capture POC completed.' };
   } catch (error) {
-    return { exitCode: 2, message: `${formatError(error)}\n${USAGE}` };
+    result = { exitCode: 2, message: `${formatError(error)}\n${USAGE}` };
   } finally {
+    if (restoreWindowMode) {
+      try {
+        await deps.restoreWindowMode?.();
+      } catch (error) {
+        result = { exitCode: 5, message: `Window mode restore failed: ${formatError(error)}` };
+      }
+    }
     await cleanup();
   }
+  return result!;
 }
 
 async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
@@ -210,6 +235,7 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
   let artifacts: ManualRunArtifacts | null = null;
   let chromiumSession: ManualChromiumSession | null = null;
   let matchedSource: DesktopCapturerSourceLike | null = null;
+  let borderlessMode: AppliedBorderlessWindowMode | null = null;
   let eventLog: Awaited<ReturnType<typeof createEventLog>> | null = null;
   let recordingClock: RecordingClock | null = null;
   let observerSink: TimestampedObserverEventSink | null = null;
@@ -309,6 +335,15 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
         console.log('borderless-maximized 模式将在后续步骤接入 Windows window mode helper；当前先使用普通最大化窗口。');
       }
     },
+    async applyWindowMode(args) {
+      if (args.displayMode !== 'borderless-maximized') return;
+      if (matchedSource === null) {
+        throw new Error('Manual capture source was not bound before applying window mode.');
+      }
+      logStep(`applying borderless window mode to ${matchedSource.id}`);
+      borderlessMode = await enableBorderlessWindowMode(matchedSource.id, runWindowsCommand);
+      logStep(`borderless window mode applied to handle ${borderlessMode.handle.toString()}`);
+    },
     async startCapture(args) {
       if (artifacts === null || matchedSource === null) {
         throw new Error('Manual capture source was not bound.');
@@ -321,6 +356,13 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       } finally {
         await finalizeEventCapture();
       }
+    },
+    async restoreWindowMode() {
+      if (borderlessMode === null) return;
+      logStep(`restoring borderless window mode for handle ${borderlessMode.handle.toString()}`);
+      await restoreBorderlessWindowMode(borderlessMode, runWindowsCommand);
+      logStep('borderless window mode restored');
+      borderlessMode = null;
     },
     cleanup,
   };
@@ -577,6 +619,11 @@ function formatError(error: unknown): string {
 }
 
 const defaultRunCommand = async (command: string, args: string[]) => execFileAsync(command, args);
+
+const runWindowsCommand = async (command: WindowsCommand) => {
+  const result = await execFileAsync(command.command, command.args);
+  return { stdout: result.stdout, stderr: result.stderr };
+};
 
 function buildRecordingManifest(input: {
   artifacts: ManualRunArtifacts;

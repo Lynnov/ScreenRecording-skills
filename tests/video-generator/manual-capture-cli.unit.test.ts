@@ -106,3 +106,68 @@ test('runs cleanup hooks for help, platform failure, source failure, and capture
     assert.equal(calls.at(-1), 'cleanup');
   }
 });
+
+test('applies borderless mode and restores it before general cleanup', async () => {
+  const calls: string[] = [];
+  const result = await runManualCapturePoc([
+    '--output', 'out',
+    '--display-mode', 'borderless-maximized',
+    '--fixture', 'capture',
+    '--duration-seconds', '1',
+  ], {
+    platform: 'win32',
+    prepareOutput: async () => { calls.push('prepare'); },
+    bindSource: async () => { calls.push('bind'); },
+    applyWindowMode: async () => { calls.push('apply'); },
+    startCapture: async () => { calls.push('capture'); },
+    restoreWindowMode: async () => { calls.push('restore'); },
+    cleanup: async () => { calls.push('cleanup'); },
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(calls, ['prepare', 'bind', 'apply', 'capture', 'restore', 'cleanup']);
+});
+
+test('restores borderless mode when apply or capture fails and skips it for F11', async () => {
+  for (const failure of ['apply', 'capture'] as const) {
+    const calls: string[] = [];
+    const result = await runManualCapturePoc([
+      '--output', 'out',
+      '--display-mode', 'borderless-maximized',
+      '--fixture', 'capture',
+      '--duration-seconds', '1',
+    ], {
+      platform: 'win32',
+      bindSource: async () => { calls.push('bind'); },
+      applyWindowMode: async () => {
+        calls.push('apply');
+        if (failure === 'apply') throw new Error('apply failed');
+      },
+      startCapture: async () => {
+        calls.push('capture');
+        if (failure === 'capture') throw new Error('capture failed');
+      },
+      restoreWindowMode: async () => { calls.push('restore'); },
+      cleanup: async () => { calls.push('cleanup'); },
+    });
+    assert.notEqual(result.exitCode, 0);
+    assert.equal(calls.filter((call) => call === 'restore').length, 1);
+    assert.deepEqual(calls.slice(-2), ['restore', 'cleanup']);
+  }
+
+  const f11Calls: string[] = [];
+  const f11Result = await runManualCapturePoc([
+    '--output', 'out',
+    '--display-mode', 'f11',
+    '--fixture', 'capture',
+    '--duration-seconds', '1',
+  ], {
+    platform: 'win32',
+    bindSource: async () => {},
+    applyWindowMode: async () => { f11Calls.push('apply'); },
+    startCapture: async () => {},
+    restoreWindowMode: async () => { f11Calls.push('restore'); },
+  });
+  assert.equal(f11Result.exitCode, 0);
+  assert.deepEqual(f11Calls, []);
+});
