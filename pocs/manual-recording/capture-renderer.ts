@@ -5,6 +5,7 @@ type RecorderMimeType = 'video/webm;codecs=vp9' | 'video/webm;codecs=vp8' | 'vid
 const startButton = document.querySelector<HTMLButtonElement>('#start');
 const stopButton = document.querySelector<HTMLButtonElement>('#stop');
 const statusText = document.querySelector<HTMLElement>('#status');
+const timerText = document.querySelector<HTMLElement>('#timer');
 const checklist = document.querySelector<HTMLFieldSetElement>('#checklist');
 const overlayClear = document.querySelector<HTMLInputElement>('#overlay-clear');
 const multiTab = document.querySelector<HTMLInputElement>('#multi-tab');
@@ -17,6 +18,8 @@ let writeQueue = Promise.resolve();
 let sequence = 0;
 let firstChunkMarked = false;
 let stopTimer: number | undefined;
+let recordingStartedAt = 0;
+let timerAnimationFrame = 0;
 
 window.addEventListener('manual-capture-stop-request', () => {
   void stopCapture();
@@ -71,6 +74,7 @@ async function startCapture(): Promise<void> {
     });
   });
   recorder.start(250);
+  startTimer();
   const durationSeconds = readDurationSeconds();
   if (durationSeconds !== null) {
     stopTimer = window.setTimeout(() => {
@@ -87,6 +91,7 @@ async function stopCapture(): Promise<void> {
     return;
   }
   setStatus('stopping');
+  stopTimerDisplay();
   if (stopTimer !== undefined) {
     window.clearTimeout(stopTimer);
     stopTimer = undefined;
@@ -114,6 +119,32 @@ function readDurationSeconds(): number | null {
   }
   const value = Number(argument);
   return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function startTimer(): void {
+  recordingStartedAt = performance.now();
+  const update = () => {
+    if (timerText !== null) {
+      timerText.textContent = formatElapsedTime(performance.now() - recordingStartedAt);
+    }
+    timerAnimationFrame = window.requestAnimationFrame(update);
+  };
+  update();
+}
+
+function stopTimerDisplay(): void {
+  if (timerAnimationFrame !== 0) {
+    window.cancelAnimationFrame(timerAnimationFrame);
+    timerAnimationFrame = 0;
+  }
+}
+
+function formatElapsedTime(milliseconds: number): string {
+  const totalMilliseconds = Math.max(0, Math.floor(milliseconds));
+  const minutes = Math.floor(totalMilliseconds / 60_000);
+  const seconds = Math.floor((totalMilliseconds % 60_000) / 1000);
+  const millis = totalMilliseconds % 1000;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
 }
 
 function setStatus(status: string): void {

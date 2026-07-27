@@ -308,7 +308,7 @@ for (const file of htmlFiles) {
     <button id="stop" type="button">结束</button>
     <fieldset id="checklist" hidden>
       <label><input id="overlay-clear" type="checkbox">悬浮窗未入镜</label>
-      <label><input id="multi-tab" type="checkbox">多标签页连续可见</label>
+      <label><input id="multi-tab" type="checkbox">录像中可看到 tab-1 和 tab-2 内容连续切换（不要求 F11 下浏览器标签栏可见）</label>
       <textarea id="notes" aria-label="验收备注"></textarea>
       <button id="submit-checklist" type="button">提交验收结论</button>
     </fieldset>
@@ -1134,7 +1134,7 @@ POC 1 只有在以下条件全部满足时通过：
 6/6 模式×缩放运行成功
 6/6 输出 1920×1080、30fps、无音频
 6/6 悬浮窗不入镜
-6/6 同窗口多标签页连续可见
+6/6 同一 Chromium 窗口内，录像中可看到 tab-1 与 tab-2 页面内容连续切换；F11 模式不要求浏览器标签栏本身可见
 F11 与 borderless-maximized 均可结束并恢复桌面状态
 捕获源缺失/歧义时 F7 禁用且无空视频
 ```

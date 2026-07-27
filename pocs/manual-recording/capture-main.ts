@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { appendFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -243,6 +243,7 @@ async function runElectronCaptureSession(
   let video: CapturePocReport['video'] = { status: 'unavailable', path: null, reason: 'capture not stopped' };
   let normalizedVideoStatus: CapturePocReport['normalizedVideoStatus'] = 'failed';
   let checklist: CaptureOperatorChecklist | null = null;
+  let sampledFrames: string[] = [];
 
   const reportBase = (): Omit<CapturePocReport, 'status' | 'overlayEnteredCapture' | 'multiTabContinuous' | 'errors'> => ({
     version: 1,
@@ -255,7 +256,7 @@ async function runElectronCaptureSession(
     evidence: {
       operatorChecklistPath: artifacts.captureOperatorChecklistPath,
       ffprobeJsonPath: artifacts.captureFfprobeJsonPath,
-      sampledFrames: [],
+      sampledFrames,
     },
   });
 
@@ -311,6 +312,12 @@ async function runElectronCaptureSession(
         const probe = await defaultRunCommand('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate,pix_fmt:format=duration', '-of', 'json', artifacts.originalVideoPath]);
         await writeFile(artifacts.captureFfprobeJsonPath, `${probe.stdout}\n`, 'utf8');
         const metadata = parseNormalizedVideoProbe(probe.stdout);
+        sampledFrames = await extractSampledFrames({
+          videoPath: artifacts.originalVideoPath,
+          framesDir: artifacts.captureEvidenceFramesDir,
+          durationMs: metadata.durationMs,
+          runCommand: defaultRunCommand,
+        });
         video = {
           status: 'available',
           path: artifacts.originalVideoPath,
@@ -431,6 +438,34 @@ function formatError(error: unknown): string {
 }
 
 const defaultRunCommand = async (command: string, args: string[]) => execFileAsync(command, args);
+
+async function extractSampledFrames(input: {
+  videoPath: string;
+  framesDir: string;
+  durationMs: number;
+  runCommand: typeof defaultRunCommand;
+}): Promise<string[]> {
+  await mkdir(input.framesDir, { recursive: true });
+  const durationSeconds = Math.max(0, input.durationMs / 1000);
+  const samples = [
+    { name: 'frame-001-start.png', atSeconds: 0.1 },
+    { name: 'frame-002-middle.png', atSeconds: durationSeconds / 2 },
+    { name: 'frame-003-end.png', atSeconds: Math.max(0, durationSeconds - 0.1) },
+  ];
+  const paths: string[] = [];
+  for (const sample of samples) {
+    const framePath = path.join(input.framesDir, sample.name);
+    await input.runCommand('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-ss', sample.atSeconds.toFixed(3),
+      '-i', input.videoPath,
+      '-frames:v', '1',
+      framePath,
+    ]);
+    paths.push(framePath);
+  }
+  return paths;
+}
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
