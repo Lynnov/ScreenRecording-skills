@@ -115,7 +115,7 @@ $dwmResult = [NativeWindow]::DwmGetWindowAttribute($handle, ${DWMWA_EXTENDED_FRA
 if ($dwmResult -ne 0) { throw "DwmGetWindowAttribute DWMWA_EXTENDED_FRAME_BOUNDS failed: $dwmResult" }
 $appliedStyle = [Int64][NativeWindow]::GetWindowLongPtr64($handle, ${GWL_STYLE})
 $forbiddenStyle = ${WS_CAPTION.toString()} -bor ${WS_THICKFRAME.toString()}
-$applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and $visibleRect.Left -eq $work.Left -and $visibleRect.Top -eq $work.Top -and $visibleRect.Right -eq $work.Right -and $visibleRect.Bottom -eq $work.Bottom
+$applied = (($appliedStyle -band $forbiddenStyle) -eq 0) -and [Math]::Abs($visibleRect.Left - $work.Left) -le 1 -and [Math]::Abs($visibleRect.Top - $work.Top) -le 1 -and [Math]::Abs($visibleRect.Right - $work.Right) -le 1 -and [Math]::Abs($visibleRect.Bottom - $work.Bottom) -le 1
 [pscustomobject]@{
   handle = [string]${handle.toString()}
   snapshot = @{

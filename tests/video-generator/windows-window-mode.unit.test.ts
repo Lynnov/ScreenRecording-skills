@@ -51,6 +51,8 @@ test('applies a verified borderless mode and restores its complete snapshot', as
   assert.equal(mode.snapshot.style, 13565952n);
   assert.equal(mode.snapshot.exStyle, 256n);
   assert.deepEqual(mode.appliedBounds, { left: 0, top: 0, right: 1920, bottom: 1040 });
+  assert.match(calls[0]!.decodedScript, /\[Math\]::Abs/);
+  assert.match(calls[0]!.decodedScript, /-le 1/);
 
   await restoreBorderlessWindowMode(mode, async (command) => {
     calls.push(command);
