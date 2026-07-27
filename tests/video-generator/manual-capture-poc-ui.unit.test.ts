@@ -68,3 +68,11 @@ test('capture main writes clock samples and recording manifest artifacts', async
   assert.match(main, /writeRecordingManifest/);
   assert.match(main, /recording-manifest\.json|manifestPath/);
 });
+
+test('events fixture is wired through timestamped observers and writes its report after close and flush', async () => {
+  const main = await readFile(path.join(pocDir, 'capture-main.ts'), 'utf8');
+  assert.match(main, /installManualCaptureObservers/);
+  assert.match(main, /createTimestampedObserverEventSink/);
+  assert.match(main, /args\.fixture === 'events'/);
+  assert.match(main, /chromiumSession\?\.close[\s\S]*observers\?\.flush[\s\S]*writeManualEventsPocReport/);
+});

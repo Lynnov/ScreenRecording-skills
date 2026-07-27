@@ -8,12 +8,20 @@ import { createCaptureChunkWriter, isValidOperatorChecklist, resolveDisplayMedia
 import { matchUniqueWindowSource } from '../../src/lib/video-generator/capture/source-matcher.js';
 import { normalizeCapturedVideo, parseNormalizedVideoProbe } from '../../src/lib/video-generator/capture/normalize-video.js';
 import { assertManualRunIsWritable, createManualRunArtifacts, ensureManualRunArtifactDirs, type ManualRunArtifacts } from '../../src/lib/video-generator/recording/artifacts.js';
-import { launchManualChromiumSession, type ManualChromiumSession } from '../../src/lib/video-generator/recording/session.js';
+import {
+  createTimestampedObserverEventSink,
+  installManualCaptureObservers,
+  launchManualChromiumSession,
+  type ManualCaptureObservers,
+  type ManualChromiumSession,
+  type TimestampedObserverEventSink,
+} from '../../src/lib/video-generator/recording/session.js';
 import { writeCaptureOperatorChecklist, writeCapturePocReport, type CaptureOperatorChecklist, type CapturePocReport } from '../../src/lib/video-generator/recording/poc-report.js';
 import { createRecordingClock, type RecordingClock } from '../../src/lib/video-generator/recording/clock.js';
 import { createEventLog } from '../../src/lib/video-generator/recording/event-log.js';
 import { analyzeClockDrift } from '../../src/lib/video-generator/recording/drift.js';
 import { writeRecordingManifest } from '../../src/lib/video-generator/recording/manifest.js';
+import { writeManualEventsPocReport } from '../../src/lib/video-generator/recording/events-poc-report.js';
 import type { CaptureSourceDescriptor } from '../../src/lib/video-generator/capture/types.js';
 import type { CaptureClockSample, RecordingEvent, RecordingManifest } from '../../src/lib/video-generator/recording/types.js';
 
@@ -202,11 +210,46 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
   let artifacts: ManualRunArtifacts | null = null;
   let chromiumSession: ManualChromiumSession | null = null;
   let matchedSource: DesktopCapturerSourceLike | null = null;
+  let eventLog: Awaited<ReturnType<typeof createEventLog>> | null = null;
+  let recordingClock: RecordingClock | null = null;
+  let observerSink: TimestampedObserverEventSink | null = null;
+  let observers: ManualCaptureObservers | null = null;
+  let fixture: ManualPocFixture | null = null;
+  let eventCaptureFinalized = false;
+  let eventWriteQueue = Promise.resolve();
+  const appendRecordingEvent = async (event: RecordingEvent) => {
+    const operation = eventWriteQueue.catch(() => undefined).then(async () => {
+      if (eventLog === null) throw new Error('Manual capture event log is not open.');
+      await eventLog.append(event);
+    });
+    eventWriteQueue = operation;
+    await operation;
+  };
+
+  const finalizeEventCapture = async () => {
+    if (eventCaptureFinalized) return;
+    eventCaptureFinalized = true;
+    await chromiumSession?.close().catch(() => undefined);
+    chromiumSession = null;
+    await observers?.flush();
+    await observerSink?.flush();
+    await eventWriteQueue.catch(() => undefined);
+    await eventLog?.close().catch(() => undefined);
+    if (fixture === 'events' && artifacts !== null) {
+      await writeManualEventsPocReport({
+        eventsPath: artifacts.eventsPath,
+        tabsPath: artifacts.tabsPath,
+        reportPath: artifacts.manualEventsPocReportPath,
+        eventCaptureComplete: (observers?.eventCaptureComplete ?? false)
+          && (observerSink?.eventCaptureComplete ?? false),
+      });
+    }
+  };
 
   const cleanup = async () => {
     electron.globalShortcut.unregisterAll();
     electron.session.defaultSession.setDisplayMediaRequestHandler(null);
-    await chromiumSession?.close().catch(() => undefined);
+    await finalizeEventCapture().catch((error) => logStep(`event capture finalization failed: ${formatError(error)}`));
     if (electron.app.isReady()) {
       electron.app.quit();
     }
@@ -223,6 +266,9 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       artifacts = createManualRunArtifacts(args.output);
       await ensureManualRunArtifactDirs(artifacts);
       await assertManualRunIsWritable(artifacts);
+      fixture = args.fixture;
+      recordingClock = createRecordingClock();
+      eventLog = await createEventLog(artifacts.eventsPath);
       logStep('output prepared');
     },
     async bindSource(args) {
@@ -235,6 +281,20 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
         sessionId,
         fixtureDir: path.dirname(fileURLToPath(import.meta.url)),
       });
+      if (args.fixture === 'events') {
+        if (recordingClock === null || eventLog === null) {
+          throw new Error('Events fixture recording clock and event log were not prepared.');
+        }
+        observerSink = createTimestampedObserverEventSink({
+          clock: recordingClock,
+          append: appendRecordingEvent,
+        });
+        observers = await installManualCaptureObservers({
+          context: chromiumSession.context,
+          tabsPath: artifacts.tabsPath,
+          onEvent: observerSink.onEvent,
+        });
+      }
       logStep(`Chromium launched with binding title ${chromiumSession.bindingTitle}`);
       logStep('polling desktop sources for Chromium binding window');
       matchedSource = await waitForUniqueWindowSource(electron, chromiumSession.bindingTitle, 10_000);
@@ -253,7 +313,14 @@ async function createRealManualCaptureDeps(): Promise<ManualCapturePocDeps> {
       if (artifacts === null || matchedSource === null) {
         throw new Error('Manual capture source was not bound.');
       }
-      await runElectronCaptureSession(electron, args, artifacts, matchedSource);
+      if (eventLog === null || recordingClock === null) {
+        throw new Error('Manual capture event log and clock were not prepared.');
+      }
+      try {
+        await runElectronCaptureSession(electron, args, artifacts, matchedSource, recordingClock, appendRecordingEvent);
+      } finally {
+        await finalizeEventCapture();
+      }
     },
     cleanup,
   };
@@ -264,6 +331,8 @@ async function runElectronCaptureSession(
   args: Required<Omit<ManualPocArgs, 'help'>>,
   artifacts: ManualRunArtifacts,
   source: DesktopCapturerSourceLike,
+  recordingClock: RecordingClock,
+  appendRecordingEvent: (event: RecordingEvent) => Promise<void>,
 ): Promise<CapturePocReport> {
   const preloadPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'capture-preload.cjs');
   logStep(`creating control window with preload ${preloadPath}`);
@@ -282,11 +351,10 @@ async function runElectronCaptureSession(
   });
 
   const display = electron.screen.getPrimaryDisplay();
-  const eventLog = await createEventLog(artifacts.eventsPath);
-  const markerController = createManualMarkerController(createRecordingClock(), () => {
+  const markerController = createManualMarkerController(recordingClock, () => {
     controlWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("manual-capture-stop-request"));').catch(() => undefined);
   }, logStep, async (event) => {
-    await eventLog.append(event);
+    await appendRecordingEvent(event);
   });
   const chunkWriter = createCaptureChunkWriter(async (bytes) => {
     await appendFile(artifacts.rawVideoPath, bytes);
@@ -353,7 +421,7 @@ async function runElectronCaptureSession(
       const timestamp = markerController.stamp();
       const sample: CaptureClockSample = { ...timestamp, mediaTimeMs: timecode };
       clockSamples.push(sample);
-      await eventLog.append({ ...timestamp, type: 'capture-clock-sample', payload: { mediaTimeMs: timecode } });
+      await appendRecordingEvent({ ...timestamp, type: 'capture-clock-sample', payload: { mediaTimeMs: timecode } });
       await chunkWriter.appendChunk(bytes, sequence);
     });
     electron.ipcMain.handle('capture:flush', async (_event, lastSequence: unknown) => {
@@ -450,7 +518,6 @@ async function runElectronCaptureSession(
   console.log('控制窗已打开：点击“开始”开始窗口捕获；结束时可按 F10 或点击“结束”，随后提交验收勾选。');
 
   return completion.finally(async () => {
-    await eventLog.close().catch(() => undefined);
     electron.ipcMain.removeHandler('capture:first-chunk');
     electron.ipcMain.removeHandler('capture:append-chunk');
     electron.ipcMain.removeHandler('capture:flush');

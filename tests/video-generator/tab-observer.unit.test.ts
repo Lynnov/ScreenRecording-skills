@@ -69,8 +69,15 @@ test('tracks stable tab lifecycle events and writes a tabs snapshot', async () =
 
     const snapshot = JSON.parse(await readFile(tabsPath, 'utf8'));
     assert.equal(snapshot.tabs.length, 2);
-    assert.equal(snapshot.tabs[1].tabId, 'tab-2');
+    assert.deepEqual(snapshot.tabs.map((tab: { tabId: string }) => tab.tabId), ['tab-1', 'tab-2']);
+    assert.ok(snapshot.tabs[0].url.includes('manual-observer-fixture.html'));
+    assert.ok(snapshot.tabs[1].url.includes('manual-observer-fixture.html?popup=1'));
+    assert.equal(snapshot.tabs[0].title, 'Manual Observer Fixture');
+    assert.equal(snapshot.tabs[1].title, 'Manual Observer Fixture');
     assert.equal(typeof snapshot.tabs[1].closedSessionTimeMs, 'number');
+    await tabs.flush();
+    const repeatedSnapshot = JSON.parse(await readFile(tabsPath, 'utf8'));
+    assert.deepEqual(repeatedSnapshot, snapshot);
   } finally {
     await context.close();
     await tabs?.flush();

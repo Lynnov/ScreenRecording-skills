@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual events fixture</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 24px; }
+    main { display: grid; gap: 16px; max-width: 760px; }
+    #scroll-area { height: 180px; overflow: auto; border: 1px solid #94a3b8; }
+    #scroll-content { height: 1000px; padding: 12px; background: linear-gradient(#eff6ff, #ddd6fe); }
+    iframe { width: 100%; height: 130px; border: 1px solid #94a3b8; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>人工录制综合事件 POC</h1>
+    <button id="plain-button" type="button">普通按钮</button>
+    <label>文本输入 <input id="text-input" name="displayName" type="text"></label>
+    <label>选项
+      <select id="select-input"><option value="one">一</option><option value="two">二</option></select>
+    </label>
+    <div id="scroll-area"><div id="scroll-content">向下滚动</div></div>
+    <button id="push-state" type="button">history.pushState</button>
+    <button id="reload" type="button">重新加载页面</button>
+    <a id="new-tab" href="?tab=2" target="_blank">打开同源新标签页</a>
+    <iframe id="same-origin-frame" title="same origin child frame" srcdoc="<!doctype html><button id='frame-button'>iframe 按钮</button><input id='frame-input'>"></iframe>
+    <section id="dynamic-container"><button id="replace-dom" type="button">动态替换 DOM</button></section>
+  </main>
+  <script>
+    document.querySelector('#plain-button').addEventListener('click', (event) => {
+      event.currentTarget.dataset.clicked = 'true';
+    });
+    document.querySelector('#push-state').addEventListener('click', () => {
+      history.pushState({ fixture: true }, '', '?route=pushed');
+    });
+    document.querySelector('#reload').addEventListener('click', () => location.reload());
+    document.querySelector('#replace-dom').addEventListener('click', () => {
+      document.querySelector('#dynamic-container').innerHTML =
+        '<button id="replacement-button" type="button">替换后的按钮</button><input id="replacement-input">';
+    });
+  </script>
+</body>
+</html>
