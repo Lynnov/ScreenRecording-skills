@@ -44,6 +44,7 @@
 | active/video-generator-recording-reliability.md | 视频生成器真实业务录制可靠性：preflight dry-run、脚本三稿、新动作语法、报告脱敏、产物目录基础规范化 | P0 已完成，Phase 4-5 待开始 |
 | active/video-generator-stage-diagnostics.md | 视频生成器录制可靠性二期：Stage 别名与失败诊断包 | Phase 0 完成，Phase 1-5 待开始 |
 | active/manual-recording-infrastructure-pocs.md | 人工录制 + Agent 辅助剪辑第一阶段：Windows 窗口捕获、统一时钟、页面事件/虚拟鼠标、多源 preview 四个基础 POC | 实现完成；POC 4 通过，POC 1-3 待人工桌面验收 |
+| active/manual-recording-poc-acceptance-remediation.md | 人工录制 POC 实机验收问题修复：Windows 真无边框、报告门槛、漂移指标拆分和 marker 画面证据 | 设计已批准，待实施 |
 | active/agent-sdk-0-2-111-adoption.md | Agent SDK 0.2.111 能力采纳（Codex 审核后双层化 + 用户视角推进路线图）：Layer A 已完成 Phase 1 chip + Phase 2b 类型适配 / 待做 Phase 1b chip 按钮 + Phase 2 限流 UI；Layer B 待 POC 后推进 WarmQuery / session fork / getContextUsage / 新 hooks / Elicitation / Deferred tools | SDK 升级已完成，下一步阶段 1（chip 按钮 + 限流 UI）1-2 周可发版 |
 | active/v0.48-post-release-issues.md | v0.48.0/0.48.1 发版后问题追查（已归档至 issue-tracker.md，保留原始记录） | 已归档 |
 ### Completed
