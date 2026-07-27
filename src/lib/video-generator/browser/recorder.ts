@@ -10,13 +10,20 @@ export interface RecordTimelineSegmentsInput {
   timeline: Timeline;
   config: VideoGeneratorConfig;
   outputDir: string;
+  deps?: RecordTimelineSegmentsDeps;
+}
+
+export interface RecordTimelineSegmentsDeps {
+  waitForTimeout?: (page: Page, timeoutMs: number) => Promise<void>;
 }
 
 export async function recordTimelineSegments({
   timeline,
   config,
   outputDir,
+  deps,
 }: RecordTimelineSegmentsInput): Promise<Timeline> {
+  const waitForTimeout = deps?.waitForTimeout ?? defaultWaitForTimeout;
   const videoDir = join(outputDir, 'clips');
   const screenshotDir = join(outputDir, 'screenshots');
   await mkdir(videoDir, { recursive: true });
@@ -51,7 +58,7 @@ export async function recordTimelineSegments({
       const startsAtMs = Math.max(plannedStartsAtMs, cursorMs);
       if (startsAtMs > cursorMs) {
         const gapMs = startsAtMs - cursorMs;
-        await page.waitForTimeout(gapMs);
+        await waitForTimeout(page, gapMs);
         cursorMs = startsAtMs;
         videoCursorMs += gapMs;
       }
@@ -79,7 +86,7 @@ export async function recordTimelineSegments({
       const videoEndMs = videoStartMs + (endsAtMs - startsAtMs);
 
       if (videoEndMs > videoCursorMs) {
-        await page.waitForTimeout(videoEndMs - videoCursorMs);
+        await waitForTimeout(page, videoEndMs - videoCursorMs);
         videoCursorMs = videoEndMs;
       }
       cursorMs = endsAtMs;
@@ -160,6 +167,10 @@ async function captureFailureScreenshot(page: Page, screenshotPath: string): Pro
 
 function monotonicNowMs(): number {
   return performance.now();
+}
+
+async function defaultWaitForTimeout(page: Page, timeoutMs: number): Promise<void> {
+  await page.waitForTimeout(timeoutMs);
 }
 
 function errorMessage(error: unknown): string {

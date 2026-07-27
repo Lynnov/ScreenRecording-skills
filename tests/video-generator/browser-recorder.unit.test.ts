@@ -563,6 +563,7 @@ test('recordTimelineSegments extends segment timing when actions take longer tha
   const outputDir = await mkdtemp(join(tmpdir(), 'browser-recorder-action-duration-'));
 
   try {
+    const waits: number[] = [];
     const timeline: Timeline = {
       version: 1,
       title: 'Recorder action duration',
@@ -596,16 +597,23 @@ test('recordTimelineSegments extends segment timing when actions take longer tha
       ],
     };
 
-    const startedAtMs = Date.now();
-    const updated = await recordTimelineSegments({ timeline, config: makeConfig(outputDir), outputDir });
-    const elapsedMs = Date.now() - startedAtMs;
+    const updated = await recordTimelineSegments({
+      timeline,
+      config: makeConfig(outputDir),
+      outputDir,
+      deps: {
+        waitForTimeout: async (_page, timeoutMs) => {
+          waits.push(timeoutMs);
+        },
+      },
+    });
     const clipPath = updated.assets?.continuousClipPath;
 
     assert.equal(updated.segments[1]?.startsAtMs, 200);
     assert.equal(updated.segments[1]?.endsAtMs, 400);
     assert.ok((updated.segments[1]?.assets.videoStartMs ?? 0) >= 800);
     assert.equal(typeof clipPath, 'string');
-    assert.ok(elapsedMs < 1600, `expected action time not to receive an extra full segment wait, got ${elapsedMs}ms`);
+    assert.deepEqual(waits, [200, 200]);
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
