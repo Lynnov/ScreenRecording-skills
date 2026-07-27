@@ -47,6 +47,7 @@ test('clock fixture exposes marker colors for clock POC validation', async () =>
   assert.match(html, /position:\s*fixed/);
   assert.match(html, /left:\s*0/);
   assert.match(html, /top:\s*0/);
+  assert.match(html, /requestAnimationFrame[\s\S]*setTimeout[\s\S]*150/);
 });
 
 test('capture main records sampled frame evidence paths in the report', async () => {

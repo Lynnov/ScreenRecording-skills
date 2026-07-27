@@ -19,6 +19,7 @@
       document.querySelector('#marker').textContent = `${name}:${requestedVideoTimeMs}`;
       document.querySelector('#marker-color').style.background = markerColors[name];
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 150));
       return performance.now();
     };
   </script>
