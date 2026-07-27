@@ -30,6 +30,14 @@ test('capture checklist explains that multi-tab continuity means recorded page c
   assert.match(html, /录像中可看到 tab-1 和 tab-2 内容连续切换/);
 });
 
+test('clock fixture exposes marker colors for clock POC validation', async () => {
+  const html = await readFile(path.join(pocDir, 'clock-fixture.html'), 'utf8');
+  assert.match(html, /showMarker/);
+  assert.match(html, /recording-start/);
+  assert.match(html, /retry-start/);
+  assert.match(html, /recording-stop/);
+});
+
 test('capture main records sampled frame evidence paths in the report', async () => {
   const main = await readFile(path.join(pocDir, 'capture-main.ts'), 'utf8');
   assert.match(main, /sampledFrames/);
@@ -49,4 +57,14 @@ test('capture main routes manual markers through the unified recording clock', a
   assert.match(main, /globalShortcut\.register\('F7'/);
   assert.match(main, /globalShortcut\.register\('F9'/);
   assert.match(main, /globalShortcut\.register\('F10'/);
+});
+
+test('capture main writes clock samples and recording manifest artifacts', async () => {
+  const main = await readFile(path.join(pocDir, 'capture-main.ts'), 'utf8');
+  assert.match(main, /createEventLog/);
+  assert.match(main, /capture-clock-sample/);
+  assert.match(main, /mediaTimeMs/);
+  assert.match(main, /analyzeClockDrift/);
+  assert.match(main, /writeRecordingManifest/);
+  assert.match(main, /recording-manifest\.json|manifestPath/);
 });

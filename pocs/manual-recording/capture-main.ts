@@ -11,8 +11,11 @@ import { assertManualRunIsWritable, createManualRunArtifacts, ensureManualRunArt
 import { launchManualChromiumSession, type ManualChromiumSession } from '../../src/lib/video-generator/recording/session.js';
 import { writeCaptureOperatorChecklist, writeCapturePocReport, type CaptureOperatorChecklist, type CapturePocReport } from '../../src/lib/video-generator/recording/poc-report.js';
 import { createRecordingClock, type RecordingClock } from '../../src/lib/video-generator/recording/clock.js';
+import { createEventLog } from '../../src/lib/video-generator/recording/event-log.js';
+import { analyzeClockDrift } from '../../src/lib/video-generator/recording/drift.js';
+import { writeRecordingManifest } from '../../src/lib/video-generator/recording/manifest.js';
 import type { CaptureSourceDescriptor } from '../../src/lib/video-generator/capture/types.js';
-import type { RecordingEvent } from '../../src/lib/video-generator/recording/types.js';
+import type { CaptureClockSample, RecordingEvent, RecordingManifest } from '../../src/lib/video-generator/recording/types.js';
 
 export type ManualDisplayMode = 'f11' | 'borderless-maximized';
 export type ManualPocFixture = 'capture' | 'clock' | 'events';
@@ -117,6 +120,7 @@ export function createManualMarkerController(
   clock: RecordingClock,
   requestStop: () => void,
   log: (message: string) => void = logStep,
+  onEvent: (event: RecordingEvent) => void | Promise<void> = asyncNoop,
 ) {
   const markerEvents: RecordingEvent[] = [];
   let stopRequested = false;
@@ -125,12 +129,19 @@ export function createManualMarkerController(
     const event: RecordingEvent = { type, ...clock.stamp() };
     markerEvents.push(event);
     log(`recorded marker ${type} at session=${event.sessionTimeMs}ms video=${event.videoTimeMs ?? 'null'}ms`);
+    void Promise.resolve(onEvent(event)).catch((error) => log(`failed to append marker event: ${formatError(error)}`));
     return event;
   };
 
   return {
+    stamp() {
+      return clock.stamp();
+    },
     markFirstVideoFrame() {
       return clock.markFirstVideoFrame();
+    },
+    firstVideoFrameSessionTimeMs() {
+      return clock.firstVideoFrameSessionTimeMs();
     },
     recordUserMarker,
     requestStopConfirmation() {
@@ -271,8 +282,11 @@ async function runElectronCaptureSession(
   });
 
   const display = electron.screen.getPrimaryDisplay();
+  const eventLog = await createEventLog(artifacts.eventsPath);
   const markerController = createManualMarkerController(createRecordingClock(), () => {
     controlWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("manual-capture-stop-request"));').catch(() => undefined);
+  }, logStep, async (event) => {
+    await eventLog.append(event);
   });
   const chunkWriter = createCaptureChunkWriter(async (bytes) => {
     await appendFile(artifacts.rawVideoPath, bytes);
@@ -284,6 +298,7 @@ async function runElectronCaptureSession(
   let normalizedVideoStatus: CapturePocReport['normalizedVideoStatus'] = 'failed';
   let checklist: CaptureOperatorChecklist | null = null;
   let sampledFrames: string[] = [];
+  let clockSamples: CaptureClockSample[] = [];
 
   const reportBase = (): Omit<CapturePocReport, 'status' | 'overlayEnteredCapture' | 'multiTabContinuous' | 'errors'> => ({
     version: 1,
@@ -331,10 +346,14 @@ async function runElectronCaptureSession(
       firstChunkMarked = true;
       markerController.markFirstVideoFrame();
     });
-    electron.ipcMain.handle('capture:append-chunk', async (_event, bytes: unknown, sequence: unknown) => {
-      if (!(bytes instanceof Uint8Array) || typeof sequence !== 'number') {
+    electron.ipcMain.handle('capture:append-chunk', async (_event, bytes: unknown, sequence: unknown, timecode: unknown) => {
+      if (!(bytes instanceof Uint8Array) || typeof sequence !== 'number' || typeof timecode !== 'number') {
         throw new Error('Invalid capture chunk payload.');
       }
+      const timestamp = markerController.stamp();
+      const sample: CaptureClockSample = { ...timestamp, mediaTimeMs: timecode };
+      clockSamples.push(sample);
+      await eventLog.append({ ...timestamp, type: 'capture-clock-sample', payload: { mediaTimeMs: timecode } });
       await chunkWriter.appendChunk(bytes, sequence);
     });
     electron.ipcMain.handle('capture:flush', async (_event, lastSequence: unknown) => {
@@ -373,6 +392,13 @@ async function runElectronCaptureSession(
         captureError = formatError(error);
         video = { status: 'unavailable', path: null, reason: captureError };
       }
+      await writeRecordingManifest(artifacts.manifestPath, buildRecordingManifest({
+        artifacts,
+        video,
+        samples: clockSamples,
+        firstVideoFrameSessionTimeMs: markerController.firstVideoFrameSessionTimeMs(),
+        captureComplete: captureError === null,
+      }));
     });
     electron.ipcMain.handle('capture:submit-checklist', async (_event, value: unknown) => {
       if (!isValidOperatorChecklist(value)) {
@@ -423,7 +449,8 @@ async function runElectronCaptureSession(
   logStep('control window loadFile resolved');
   console.log('控制窗已打开：点击“开始”开始窗口捕获；结束时可按 F10 或点击“结束”，随后提交验收勾选。');
 
-  return completion.finally(() => {
+  return completion.finally(async () => {
+    await eventLog.close().catch(() => undefined);
     electron.ipcMain.removeHandler('capture:first-chunk');
     electron.ipcMain.removeHandler('capture:append-chunk');
     electron.ipcMain.removeHandler('capture:flush');
@@ -483,6 +510,34 @@ function formatError(error: unknown): string {
 }
 
 const defaultRunCommand = async (command: string, args: string[]) => execFileAsync(command, args);
+
+function buildRecordingManifest(input: {
+  artifacts: ManualRunArtifacts;
+  video: CapturePocReport['video'];
+  samples: CaptureClockSample[];
+  firstVideoFrameSessionTimeMs: number | null;
+  captureComplete: boolean;
+}): RecordingManifest {
+  const availableDurationMs = input.video.status === 'available' ? input.video.durationMs : 0;
+  const drift = analyzeClockDrift(input.samples, availableDurationMs);
+  const recordingEndMs = input.samples.at(-1)?.sessionTimeMs ?? 0;
+  return {
+    version: 1,
+    platform: 'win32',
+    video: input.video,
+    rawVideoPath: input.artifacts.rawVideoPath,
+    eventsPath: input.artifacts.eventsPath,
+    tabsPath: input.artifacts.tabsPath,
+    recordingStartMs: 0,
+    recordingEndMs,
+    firstVideoFrameSessionTimeMs: input.firstVideoFrameSessionTimeMs,
+    attempts: [],
+    clockStatus: drift.status,
+    maxObservedDriftMs: drift.maxObservedDriftMs,
+    maxAllowedDriftMs: drift.maxAllowedDriftMs,
+    captureComplete: input.captureComplete && drift.status === 'ok',
+  };
+}
 
 async function extractSampledFrames(input: {
   videoPath: string;

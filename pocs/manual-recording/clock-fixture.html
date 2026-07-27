@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>Clock Capture Fixture</title></head>
+<body>
+  <main>
+    <output id="clock">0</output>
+    <output id="marker">none</output>
+    <div id="marker-color" style="width:240px;height:240px;background:#111"></div>
+  </main>
+  <script>
+    const markerColors = { 'recording-start': '#ff0000', 'retry-start': '#00ff00', 'recording-stop': '#0000ff' };
+    const origin = performance.now();
+    function tick() {
+      document.querySelector('#clock').textContent = String(Math.round(performance.now() - origin));
+      requestAnimationFrame(tick);
+    }
+    tick();
+    globalThis.showMarker = async (name, requestedVideoTimeMs) => {
+      document.querySelector('#marker').textContent = `${name}:${requestedVideoTimeMs}`;
+      document.querySelector('#marker-color').style.background = markerColors[name];
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      return performance.now();
+    };
+  </script>
+</body>
+</html>
