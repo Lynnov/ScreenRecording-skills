@@ -16,3 +16,4 @@
 | video-generator-recording-checklist-2026-05-29.md | 真实业务视频录制检查清单：三稿、登录态、选择器、dry-run、正式生成和验收 |
 | manual-recording-agent-editing-design.md | 人工录制与 Agent 辅助剪辑设计：窗口捕获、录制步骤推断、重试、初剪审核、Segment 补录和双流程架构 |
 | manual-recording-infrastructure-poc-results.md | 人工录制基础设施第一轮 POC 结果：自动回归、多源 preview 实证，以及仍待人工桌面验收的窗口捕获、统一时钟和页面事件 |
+| manual-recording-poc-acceptance-remediation-design.md | 人工录制 POC 实机验收问题修复设计：Windows 真无边框、报告证据闭环、漂移指标拆分和 marker 颜色抽帧 |
