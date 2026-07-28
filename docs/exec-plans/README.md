@@ -43,7 +43,7 @@
 | active/continuous-video-recording.md | 连续操作视频录制：1920×1080 全脚本连续录制、selector 滚动等待、字幕规范化、Pacdora 可见路径 | 最终验证完成，待提交/归档 |
 | active/video-generator-recording-reliability.md | 视频生成器真实业务录制可靠性：preflight dry-run、脚本三稿、新动作语法、报告脱敏、产物目录基础规范化 | P0 已完成，Phase 4-5 待开始 |
 | active/video-generator-stage-diagnostics.md | 视频生成器录制可靠性二期：Stage 别名与失败诊断包 | Phase 0 完成，Phase 1-5 待开始 |
-| active/manual-recording-agent-editing-productization.md | 人工录制 + Agent 辅助剪辑产品化：guide、Action/attempt、人工录制、edit-plan、审核、Segment pickup、TTS/finalize | Phase 0-7 待开始；POC 基础设施已完成 |
+| active/manual-recording-agent-editing-productization.md | 人工录制 + Agent 辅助剪辑产品化：Agent exchange、正式 overlay、Action/attempt、人工录制、三栏审核、Segment pickup、TTS/finalize | Phase 0-9 待开始；POC 基础设施已完成 |
 | active/agent-sdk-0-2-111-adoption.md | Agent SDK 0.2.111 能力采纳（Codex 审核后双层化 + 用户视角推进路线图）：Layer A 已完成 Phase 1 chip + Phase 2b 类型适配 / 待做 Phase 1b chip 按钮 + Phase 2 限流 UI；Layer B 待 POC 后推进 WarmQuery / session fork / getContextUsage / 新 hooks / Elicitation / Deferred tools | SDK 升级已完成，下一步阶段 1（chip 按钮 + 限流 UI）1-2 周可发版 |
 | active/v0.48-post-release-issues.md | v0.48.0/0.48.1 发版后问题追查（已归档至 issue-tracker.md，保留原始记录） | 已归档 |
 ### Completed
