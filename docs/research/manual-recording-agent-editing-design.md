@@ -28,7 +28,7 @@ Markdown → Timeline → TTS → Playwright 自动操作与连续录制 → ffm
 - Playwright 只观察页面事件和状态，不执行业务动作；
 - Electron 捕获指定 Chromium 窗口，并显示独立悬浮控制窗；
 - 人工录制阶段不采集系统声音或麦克风；
-- 第一版由 Claude Code Agent 承担脚本拆解、素材分析和剪辑推理；
+- 第一版由兼容 Agent 承担脚本拆解、素材分析和剪辑推理，不绑定具体 Agent 产品、模型或供应商；
 - CLI 承担确定性录制、数据校验、素材管理和 ffmpeg 渲染；
 - 原始 Markdown、原始视频和旧补录素材永不覆盖；
 - Agent 只输出结构化剪辑建议，不直接修改原始素材；
@@ -89,7 +89,7 @@ Markdown → Timeline → TTS → Playwright 自动操作与连续录制 → ffm
 - preview 和 final 的 ffmpeg 渲染；
 - TTS、字幕和报告输出。
 
-### Claude Code Agent 负责
+### 兼容 Agent 负责
 
 - 将不够清晰的 Markdown 拆解成 `Segment + Action`；
 - 为 Action 生成事件匹配条件和结果状态；

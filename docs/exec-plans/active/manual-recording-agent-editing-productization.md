@@ -9,7 +9,7 @@
 
 **Goal:** 在已通过的 Windows 窗口捕获、统一时钟、页面事件、虚拟鼠标和多源 preview POC 之上，交付可实际运行的“Markdown → Agent guide → 人工录制 → Agent 初剪 → 三栏审核/补录 → Agent 旁白 → TTS/字幕/final”完整产品流程。
 
-**Architecture:** 现有自动模式 `video:generate` 保持不变；人工模式新增独立的 manual application layer、正式 Electron overlay/review 应用和确定性 CLI。第一版 Agent 由 Claude Code/Codex 会话承担，通过版本化 request/response JSON 与 CLI 交接，不把远程 AI provider 内置进录制进程；CLI 只负责编译请求、schema 校验、素材管理、状态机和 ffmpeg/TTS 执行。POC 入口保留为回归基线，正式产品不依赖 `pocs/manual-recording/` 的 UI 或 runner。
+**Architecture:** 现有自动模式 `video:generate` 保持不变；人工模式新增独立的 manual application layer、正式 Electron overlay/review 应用和确定性 CLI。第一版 Agent 通过版本化 request/response JSON 与 CLI 交接，协议不绑定具体 Agent 产品、模型、运行时或供应商；CLI 只负责编译请求、schema 校验、素材管理、状态机和 ffmpeg/TTS 执行。POC 入口保留为回归基线，正式产品不依赖 `pocs/manual-recording/` 的 UI 或 runner。
 
 **Tech Stack:** TypeScript ESM、Node.js >=22.12.0、Electron 43.1.1、Playwright 1.60、node:test + tsx、ffmpeg/ffprobe、DashScope TTS、Windows 10/11。
 
@@ -28,7 +28,7 @@
 
 ### 第一版明确包含
 
-- Claude Code/Codex Agent 生成 guide、edit plan、edit report 和最终旁白建议。
+- 任意兼容 exchange schema 的 Agent 生成 guide、edit plan、edit report 和最终旁白建议。
 - 正式 Electron 悬浮窗、F7/F8/Shift+F8/F9/F10、Action/attempt、结果状态判断。
 - 单/多标签页人工录制、Segment pickup、三栏审核和局部 preview。
 - 已审核有效时间轴上的 TTS、字幕和 final。
@@ -38,14 +38,14 @@
 - macOS/Linux、独立 popup、其他桌面应用、整屏录制、系统声音/麦克风。
 - 自动登录、自动点击/填写、自动切换标签页、自动恢复网页状态。
 - 隐私脱敏和业务数据外传治理；Agent request 第一版保留本地业务文本，并在报告中明确告知。
-- 内置 Claude/OpenAI provider；模型调用发生在当前 Agent 会话，录制进程不可依赖模型在线。
+- 硬编码某个 Agent/provider/model；Agent 调用发生在录制进程之外，录制进程不可依赖模型在线。
 
 ## 1. 产品命令和完整流程
 
 ```text
 video:guide
   → 生成 agent/guide-request.vNN.json
-  → Claude Code/Codex 写 agent/guide-response.vNN.json
+  → 兼容 Agent 写 agent/guide-response.vNN.json
   → CLI 校验并保存 recording-guide.approved.json
 
 video:record
@@ -55,7 +55,7 @@ video:record
 
 video:analyze
   → 抽关键帧并生成 agent/edit-request.vNN.json
-  → Claude Code/Codex 写 agent/edit-response.vNN.json
+  → 兼容 Agent 写 agent/edit-response.vNN.json
   → CLI 校验为 edit-plan.agent.vNN.json + edit-report.agent.vNN.md
 
 video:preview
@@ -71,7 +71,7 @@ video:pickup
 
 video:narration
   → 生成 agent/narration-request.vNN.json
-  → Claude Code/Codex 写 agent/narration-response.vNN.json
+  → 兼容 Agent 写 agent/narration-response.vNN.json
   → CLI 校验并保存 narration-final.approved.md
 
 video:finalize
@@ -179,6 +179,13 @@ video-runs/<run>/
 `ManualSource` 必须包含：
 
 ```ts
+interface AgentProducer {
+  agentId: string;
+  provider?: string;
+  model?: string;
+  generatedAt: string;
+}
+
 interface ManualSource extends EditSource {
   kind: 'original' | 'pickup';
   segmentId: string | null;
@@ -218,7 +225,7 @@ git add src/lib/video-generator/manual src/lib/video-generator/recording/types.t
 git commit -m "feat: define manual recording product protocols"
 ```
 
-## Task 2: Claude Code/Codex guide 交接和 `video:guide`
+## Task 2: Agent-neutral guide 交接和 `video:guide`
 
 **Files:**
 - Create: `src/lib/video-generator/manual/agent-exchange.ts`
@@ -235,7 +242,7 @@ git commit -m "feat: define manual recording product protocols"
 
 - [ ] **Step 1: 写 Agent exchange 失败测试**
 
-协议固定为：
+协议固定为；`producer` 只用于审计，不参与选择或限制 Agent：
 
 ```ts
 interface GuideAgentRequest {
@@ -255,6 +262,7 @@ interface GuideAgentResponse {
   version: 1;
   kind: 'manual-guide-response';
   requestVersion: number;
+  producer: AgentProducer;
   polishedMarkdown: string;
   executableMarkdown: string;
   guide: RecordingGuide;
@@ -262,7 +270,7 @@ interface GuideAgentResponse {
 }
 ```
 
-测试非法 kind/version、重复 id、空 Action、非法 startUrl、未知 expected event/result，以及 Agent 修改原始脚本的企图。
+测试非法 kind/version、缺失或非法 producer、重复 id、空 Action、非法 startUrl、未知 expected event/result，以及 Agent 修改原始脚本的企图。
 
 - [ ] **Step 2: 实现 prepare/apply 两阶段 CLI**
 
@@ -468,6 +476,7 @@ interface EditAgentResponse {
   version: 1;
   kind: 'manual-edit-response';
   requestVersion: number;
+  producer: AgentProducer;
   plan: EditPlan;
   decisions: Array<{
     segmentId: string;
@@ -623,6 +632,7 @@ interface NarrationAgentResponse {
   version: 1;
   kind: 'manual-narration-response';
   requestVersion: number;
+  producer: AgentProducer;
   segments: Array<{
     segmentId: string;
     text: string;
@@ -745,7 +755,7 @@ npm run video:finalize -- --run video-runs/manual-product-e2e
 npm run verify:manual -- --run video-runs/manual-product-e2e --stage final
 ```
 
-Agent response 文件由当前 Agent 会话根据 request 生成；E2E 记录具体 Agent、模型和生成时间，CLI 不假装自动调用模型。
+Agent response 文件由任意兼容 Agent 根据 request 生成；E2E 记录 `producer.agentId`、可选 provider/model 和生成时间，CLI 不推断或假装自动调用某个模型。
 
 - [ ] **Step 5: 运行全量回归**
 
