@@ -1,23 +1,23 @@
 # 人工录制基础设施 POC 第一轮结果
 
-> 验证日期：2026-07-27  
+> 验证日期：2026-07-27—2026-07-28
 > 分支：`worktree-manual-recording-poc-round1`  
-> 结论：POC 2、POC 3、POC 4 通过；POC 1 已通过 Windows 150% 下的 F11 和
-> borderless-maximized，仍缺 100%/125% 矩阵，因此计划继续保留在 `active/`
+> 结论：POC 1—4 全部通过；POC 1 的 Windows 100%/125%/150% ×
+> F11/borderless-maximized 六项矩阵全部通过
 
 ## 环境
 
 | 项目 | 实测值 |
 |---|---|
 | 操作系统 | Windows 10 专业版 10.0.19045（build 19045） |
-| 显示缩放 | Windows 150%（Electron `displayScaleFactor=1.5`） |
+| 显示缩放 | Windows 100%/125%/150%（Electron `displayScaleFactor=1/1.25/1.5`） |
 | Node.js | POC runner 24.18.0；项目开发环境另有 Node.js 22.14.0 |
 | Electron / Chromium | Electron 43.1.1 / Chromium 150.0.7871.114 |
 | Playwright | 1.60.0（项目声明 `^1.58.1`） |
 | ffmpeg / ffprobe | 8.1.1 full build |
 | DashScope | `DASHSCOPE_API_KEY` 缺失；不影响本轮录制基础设施 POC |
 
-这里的 150% 是 Windows 显示缩放，不是 Chrome 单标签页页面缩放。实测确认 Chrome 页面
+这里的 100%/125%/150% 是 Windows 显示缩放，不是 Chrome 单标签页页面缩放。实测确认 Chrome 页面
 缩放不会自动传播到新标签页，因此它不能代替 Windows DPI 矩阵。
 
 ## 通用回归
@@ -30,20 +30,20 @@
 
 ## POC 1：Windows 指定 Chromium 窗口捕获
 
-### 已通过的 150% 证据
+### 已通过的缩放矩阵
 
-| 模式 | 运行目录 | 结果 |
-|---|---|---|
-| F11 | `video-runs/manual-poc-f11-150-rerun` | report passed；1920×1080、30fps、无音频、overlay 不入镜、多标签页连续 |
-| borderless-maximized | `video-runs/manual-poc-borderless-150-fixed3` | report/verifier passed；上述媒体条件通过，且 `windowMode.applied=true`、`restored=true` |
+| Windows 缩放 | 模式 | 运行目录 | 结果 |
+|---|---|---|---|
+| 100% | F11 | `video-runs/manual-poc-f11-100-20260728-1` | report/verifier passed；`displayScaleFactor=1` |
+| 100% | borderless-maximized | `video-runs/manual-poc-borderless-100-20260728-1` | report/verifier passed；`displayScaleFactor=1`；`windowMode.applied=true`、`restored=true` |
+| 125% | F11 | `video-runs/manual-poc-f11-125-20260728-1` | report/verifier passed；`displayScaleFactor=1.25` |
+| 125% | borderless-maximized | `video-runs/manual-poc-borderless-125-20260728-1` | report/verifier passed；`displayScaleFactor=1.25`；`windowMode.applied=true`、`restored=true` |
+| 150% | F11 | `video-runs/manual-poc-f11-150-rerun` | report passed；`displayScaleFactor=1.5` |
+| 150% | borderless-maximized | `video-runs/manual-poc-borderless-150-fixed3` | report/verifier passed；`displayScaleFactor=1.5`；`windowMode.applied=true`、`restored=true` |
 
 borderless 实机修复覆盖了原生最大化窗口、DWM/User32 坐标差异、DPI 坐标空间和边框取整；
-最终 150% 证据显示真正移除窗口 chrome，退出后完整恢复原窗口状态。
-
-### 尚未完成
-
-100% 和 125% 下的 F11/borderless 共四次运行尚未实测。当前只能宣称 150% 下 2/2
-通过，不能外推为原计划要求的 6/6，也不能归档 POC 1。
+三个缩放档位的证据均显示真正移除窗口 chrome，退出后完整恢复原窗口状态。六次运行均为
+1920×1080、30fps、无音频，overlay 不入镜，多标签页内容连续，POC 1 通过。
 
 ## POC 2：统一时钟、标记和漂移
 
@@ -104,8 +104,8 @@ ffprobe 尾差分别过门槛。长测未重复三色快捷键；三色证据由
 
 ## 第一轮结论与后续约束
 
-1. POC 2、POC 3、POC 4 已具有自动回归和真实产物双重证据。
-2. POC 1 只完成 Windows 150% 的 F11/borderless；100%/125% 四次运行完成前继续 active。
+1. POC 1—4 均已具有自动回归和真实产物双重证据。
+2. POC 1 的 Windows 100%/125%/150% × F11/borderless 六次运行全部通过，可归档。
 3. Chrome 单标签页页面缩放不属于 Windows DPI 验收，不计入缩放矩阵。
-4. 当前不需要再次运行 30 分钟录制；后续只剩 POC 1 的 Windows 显示缩放矩阵。
+4. 30 分钟漂移和 fixed12 三色 marker 已独立通过，本轮未重复运行。
 5. 在 DashScope 凭据可用前，真实 TTS 与最终 `final.mp4` 回归仍是独立未验证项。

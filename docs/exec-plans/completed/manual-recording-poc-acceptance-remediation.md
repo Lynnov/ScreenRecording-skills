@@ -1,6 +1,9 @@
 # Manual Recording POC Acceptance Remediation Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> 完成日期：2026-07-28
+> 状态：已完成；Windows 100%/125%/150% 缩放矩阵 6/6 通过
 
 **Goal:** 修复实机验收暴露的伪 borderless、报告误判、漂移指标混合和 marker 无画面证据问题，使 POC 1/2 能按原计划产生可复核结论。
 
@@ -31,7 +34,7 @@
 - Modify: `src/lib/video-generator/capture/windows-window-mode.ts`
 - Modify: `tests/video-generator/windows-window-mode.unit.test.ts`
 
-- [ ] **Step 1: 写 handle、apply/restore 和回读验证的失败测试**
+- [x] **Step 1: 写 handle、apply/restore 和回读验证的失败测试**
 
 在测试中定义注入 runner，并要求下列 API：
 
@@ -64,7 +67,7 @@ await restoreBorderlessWindowMode(mode, async (command) => {
 
 同时断言 malformed source ID、`applied=false`、无效 JSON 和 `restored=false` 均 reject。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run:
 
@@ -74,7 +77,7 @@ npx tsx --test tests/video-generator/windows-window-mode.unit.test.ts
 
 Expected: FAIL，提示 `enableBorderlessWindowMode` / `restoreBorderlessWindowMode` 尚未导出或 snapshot 缺少 `exStyle`。
 
-- [ ] **Step 3: 实现最小 helper**
+- [x] **Step 3: 实现最小 helper**
 
 导出固定接口：
 
@@ -111,7 +114,7 @@ PowerShell 增加 `GWL_EXSTYLE`、`MONITOR_DEFAULTTONEAREST`、`GetMonitorInfo` 
 只接受 `^window:(\d+):\d+$`；JSON 中 bigint 使用十进制字符串。restore 同时恢复 style、
 exStyle、bounds，并要求脚本返回 `{ restored: true }`。
 
-- [ ] **Step 4: 运行 helper 测试确认通过**
+- [x] **Step 4: 运行 helper 测试确认通过**
 
 Run:
 
@@ -121,7 +124,7 @@ npx tsx --test tests/video-generator/windows-window-mode.unit.test.ts
 
 Expected: PASS，所有 handle 和 fail-closed 分支通过。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/capture/windows-window-mode.ts tests/video-generator/windows-window-mode.unit.test.ts
@@ -136,7 +139,7 @@ git commit -m "fix: implement Windows borderless window mode"
 - Modify: `pocs/manual-recording/capture-main.ts`
 - Modify: `tests/video-generator/manual-capture-cli.unit.test.ts`
 
-- [ ] **Step 1: 写应用和所有退出路径恢复的失败测试**
+- [x] **Step 1: 写应用和所有退出路径恢复的失败测试**
 
 扩展 `ManualCapturePocDeps`：
 
@@ -150,7 +153,7 @@ restoreWindowMode?: () => Promise<void>;
 测试 `borderless-maximized` 调用 apply；`f11` 不调用。分别令 bind、apply、capture 抛错，
 并断言进入 `finally` 后 restore 恰好一次。restore 自身失败时返回非零并保留错误文本。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run:
 
@@ -160,7 +163,7 @@ npx tsx --test tests/video-generator/manual-capture-cli.unit.test.ts
 
 Expected: FAIL，apply/restore callbacks 尚未被调用。
 
-- [ ] **Step 3: 最小接线**
+- [x] **Step 3: 最小接线**
 
 `runManualCapturePoc()` 固定顺序：
 
@@ -175,7 +178,7 @@ finally 顺序为 capture handlers → `restoreWindowMode` → observers/context
 真实 deps 在 source 绑定后调用 `enableBorderlessWindowMode(matchedSource.id, runner)`，
 保存 snapshot；F11 保存 `{ requested: 'f11', applied: false }`，不调用 User32。
 
-- [ ] **Step 4: 运行相关测试**
+- [x] **Step 4: 运行相关测试**
 
 Run:
 
@@ -185,7 +188,7 @@ npx tsx --test tests/video-generator/manual-capture-cli.unit.test.ts tests/video
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add pocs/manual-recording/capture-main.ts tests/video-generator/manual-capture-cli.unit.test.ts
@@ -202,7 +205,7 @@ git commit -m "fix: restore manual capture window mode"
 - Modify: `tests/video-generator/manual-poc-report.unit.test.ts`
 - Modify: `tests/video-generator/manual-window-capture-poc.test.ts`
 
-- [ ] **Step 1: 写报告 invariant 失败测试**
+- [x] **Step 1: 写报告 invariant 失败测试**
 
 新增：
 
@@ -235,7 +238,7 @@ ffprobeJsonPath 或 sampledFrames 为空
 
 F11 passed 要求三个基础抽帧，但允许 `applied=false`、`restored=null`。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run:
 
@@ -245,7 +248,7 @@ npx tsx --test tests/video-generator/manual-poc-report.unit.test.ts
 
 Expected: FAIL，现有 writer 接受至少一个错误 passed report。
 
-- [ ] **Step 3: 实现统一 status predicate**
+- [x] **Step 3: 实现统一 status predicate**
 
 导出：
 
@@ -258,7 +261,7 @@ export function capturePocEvidenceErrors(
 `capture-main.ts` 使用该函数加 capture/window errors 计算 `passed|failed|incomplete`；
 writer 对声称 passed 但 predicate 返回错误的数据 reject。真实 restore 结果在最终报告前写入。
 
-- [ ] **Step 4: 运行报告与独立 POC 测试**
+- [x] **Step 4: 运行报告与独立 POC 测试**
 
 Run:
 
@@ -268,7 +271,7 @@ npx tsx --test tests/video-generator/manual-poc-report.unit.test.ts tests/video-
 
 Expected: 单元测试 PASS；独立 POC 测试只在显式 `MANUAL_POC_RUN` 下使用新报告。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/recording/poc-report.ts pocs/manual-recording/capture-main.ts tests/video-generator/manual-poc-report.unit.test.ts tests/video-generator/manual-window-capture-poc.test.ts
@@ -286,7 +289,7 @@ git commit -m "fix: gate capture reports on window evidence"
 - Modify: `tests/video-generator/recording-drift.unit.test.ts`
 - Modify: `tests/video-generator/recording-manifest.unit.test.ts`
 
-- [ ] **Step 1: 用实测样本写失败测试**
+- [x] **Step 1: 用实测样本写失败测试**
 
 构造 cadence 约 270ms、duration delta `273.564ms`、slope 约 `1.13ppm` 的样本，并断言：
 
@@ -300,7 +303,7 @@ assert.ok(result.ffprobeDurationDeltaMs <= result.maxAllowedFfprobeDurationDelta
 
 另建真正漂移样本，要求 residual 或 slope 超限时仍为 `drift-detected`；样本不足 fail closed。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run:
 
@@ -310,7 +313,7 @@ npx tsx --test tests/video-generator/recording-drift.unit.test.ts
 
 Expected: FAIL，现有统一 250ms 门槛把实测样本判为 `drift-detected`。
 
-- [ ] **Step 3: 实现拆分指标**
+- [x] **Step 3: 实现拆分指标**
 
 `DriftAnalysis` 固定字段：
 
@@ -327,7 +330,7 @@ maxAllowedFfprobeDurationDeltaMs: number;
 `maxResidualMs <= max(250, durationMs*0.00015)` 且有限。manifest 保存全部字段，
 `captureComplete` 继续要求 `status==='ok'`。
 
-- [ ] **Step 4: 运行 drift、manifest 和 clock 测试**
+- [x] **Step 4: 运行 drift、manifest 和 clock 测试**
 
 Run:
 
@@ -337,7 +340,7 @@ npx tsx --test tests/video-generator/recording-drift.unit.test.ts tests/video-ge
 
 Expected: 单元测试 PASS；真实 POC wrapper 读取新字段并断言两类指标分别在门槛内。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/lib/video-generator/recording/drift.ts src/lib/video-generator/recording/types.ts pocs/manual-recording/capture-main.ts tests/video-generator/recording-drift.unit.test.ts tests/video-generator/recording-manifest.unit.test.ts tests/video-generator/manual-clock-poc.test.ts
@@ -356,7 +359,7 @@ git commit -m "fix: separate recording drift diagnostics"
 - Modify: `pocs/manual-recording/capture-main.ts`
 - Modify: `tests/video-generator/manual-clock-poc.test.ts`
 
-- [ ] **Step 1: 写颜色匹配和 ffmpeg 调用失败测试**
+- [x] **Step 1: 写颜色匹配和 ffmpeg 调用失败测试**
 
 期望 API：
 
@@ -378,7 +381,7 @@ assert.deepEqual(evidence.map((item) => item.passed), [true, true, true]);
 runner 返回 1×1 `rgb24` buffer；红 `[255,0,0]`、绿 `[0,255,0]`、蓝 `[0,0,255]`
 分别通过。null timestamp、三次错色、命令失败均产生结构化 failed evidence。
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run:
 
@@ -388,7 +391,7 @@ npx tsx --test tests/video-generator/marker-evidence.unit.test.ts
 
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现最小 marker collector**
+- [x] **Step 3: 实现最小 marker collector**
 
 对每个 marker 的 `-1/0/+1` 帧执行 ffmpeg：
 
@@ -401,7 +404,7 @@ Expected: FAIL，模块不存在。
 dominant channel >= 180 且另外两个 channel <= 80 视为命中。保存 PNG 证据和 RGB JSON；
 manifest 保存 `markerEvidence`。只有 clock fixture 强制三种 marker 全部通过。
 
-- [ ] **Step 4: 接入 capture main 与独立验证器**
+- [x] **Step 4: 接入 capture main 与独立验证器**
 
 normalize 成功后、写 manifest 前收集 marker evidence。`manual-clock-poc.test.ts` 要求：
 
@@ -412,7 +415,7 @@ assert.deepEqual(
 );
 ```
 
-- [ ] **Step 5: 运行 marker 和 clock 测试**
+- [x] **Step 5: 运行 marker 和 clock 测试**
 
 Run:
 
@@ -422,7 +425,7 @@ npx tsx --test tests/video-generator/marker-evidence.unit.test.ts tests/video-ge
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/lib/video-generator/recording/marker-evidence.ts tests/video-generator/marker-evidence.unit.test.ts src/lib/video-generator/recording/artifacts.ts src/lib/video-generator/recording/types.ts pocs/manual-recording/capture-main.ts tests/video-generator/manual-clock-poc.test.ts tests/video-generator/manual-artifacts.unit.test.ts

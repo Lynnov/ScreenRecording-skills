@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > 创建时间：2026-07-17  
-> 最后更新：2026-07-27
+> 最后更新：2026-07-28
 > 设计基线：`6d46994 docs: design manual recording and agent editing`
 
 **Goal:** 在不修改现有 Playwright 自动录制流程的前提下，独立验证 Windows 指定 Chromium 窗口捕获、统一录制时钟、页面事件与虚拟鼠标、多源 Segment 预览渲染四项确定性基础设施。
@@ -44,17 +44,17 @@
 | Phase | 内容 | 状态 | 独立验收产物 |
 |---|---|---|---|
 | Phase 0 | POC 公共依赖、构建边界和素材目录 | 已完成 | Electron 可构建；manual POC 目录可创建 |
-| POC 1 | Windows 指定 Chromium 窗口捕获 | 150% 已通过；100%/125% 待验收 | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
+| POC 1 | Windows 指定 Chromium 窗口捕获 | 已完成（100%/125%/150% × F11/borderless 6/6） | `capture/original-window.mp4` + `reports/capture-poc-report.json` |
 | POC 2 | 视频、页面事件和用户标记统一时钟 | 已完成 | `capture/events.jsonl` + `capture/recording-manifest.json`（manifest 内含漂移报告字段） |
 | POC 3 | 页面事件采集和虚拟鼠标 | 已完成 | `capture/events.jsonl` + `reports/manual-events-poc-report.json` |
 | POC 4 | 原始录像 + Segment 补录多源预览 | 已完成 | `edit/preview-timeline.json` + `edit/preview.mp4` |
-| Phase 5 | 全量回归、POC 结果文档和归档决策 | 进行中 | `docs/research/manual-recording-infrastructure-poc-results.md` |
+| Phase 5 | 全量回归、POC 结果文档和归档决策 | 已完成 | `docs/research/manual-recording-infrastructure-poc-results.md` |
 
 ## 第一份计划的明确范围
 
 本计划只覆盖设计文档第 20 节的四个基础设施 POC：
 
-1. **POC 1：Windows Electron 指定 Chromium 窗口捕获**——同一 Chromium 窗口中的多标签页连续录像、悬浮窗不入镜、固定 1920×1080、F11/无边框最大化、Windows 125%/150% 缩放。
+1. **POC 1：Windows Electron 指定 Chromium 窗口捕获**——同一 Chromium 窗口中的多标签页连续录像、悬浮窗不入镜、固定 1920×1080、F11/无边框最大化、Windows 100%/125%/150% 缩放。
 2. **POC 2：统一录制时钟**——`sessionTimeMs`、`videoTimeMs`、F7/F9/F10 标记、长录制漂移检测。
 3. **POC 3：页面事件与虚拟鼠标**——采集 click/input/change/scroll/navigation/tab，JSONL 追加写，新 Page/导航重新注入，虚拟指针不拦截网页。
 4. **POC 4：多源 Segment 预览渲染**——original + pickup source、trim、concat、局部加速、末帧定格、短淡化、preview 输出。
@@ -114,7 +114,7 @@ format=yuv420p
 
 - `f11` 模式由操作员在 POC 提示后对 Chromium 按 F11；报告记录确认时刻。
 - `borderless-maximized` 模式由 Windows 专用 helper 根据 `DesktopCapturerSource.id` 中的 window handle 调用 PowerShell/User32，去除标题栏和可调整边框后铺满当前 monitor work area；退出时恢复原 window style 和 bounds。
-- Windows 125% / 150% 缩放不由程序自动修改，避免改变用户系统设置；POC 读取 Electron `screen.getPrimaryDisplay().scaleFactor` 写入报告，并在两种人工设置下分别运行。
+- Windows 100% / 125% / 150% 缩放不由程序自动修改，避免改变用户系统设置；POC 读取 Electron `screen.getPrimaryDisplay().scaleFactor` 写入报告，并在三种人工设置下分别运行。
 - 每次运行都以 ffprobe 实际结果判断输出是否为 1920×1080，不能用请求参数代替验收。
 
 ### 5. 统一时钟
@@ -351,7 +351,7 @@ Expected:
 
 版本检查和两个 TypeScript 命令退出码均为 0；`dist/manual-recording-poc/pocs/manual-recording/build-smoke.js`、`capture.html`、`capture-fixture.html` 均存在。Electron 自带 TypeScript declarations，通过普通 `import type ... from 'electron'` 解析，不安装 `@types/electron`。
 
-- [ ] **Step 5: 提交 Phase 0 构建边界**
+- [x] **Step 5: 提交 Phase 0 构建边界**
 
 ```bash
 git add package.json package-lock.json tsconfig.electron-poc.json scripts/copy-manual-poc-assets.mjs pocs/manual-recording/build-smoke.ts pocs/manual-recording/capture.html pocs/manual-recording/capture-fixture.html
@@ -560,7 +560,7 @@ npm run test
 
 Expected: 定向测试 PASS；`npm run test` 退出码为 0，typecheck 和当前仓库全部 `*.unit.test.ts` PASS；不把测试数量写死。
 
-- [ ] **Step 6: 提交公共协议**
+- [x] **Step 6: 提交公共协议**
 
 ```bash
 git add src/lib/video-generator/recording/types.ts src/lib/video-generator/recording/artifacts.ts tests/video-generator/manual-artifacts.unit.test.ts
@@ -700,7 +700,7 @@ npx tsx --test tests/video-generator/capture-source-matcher.unit.test.ts tests/v
 
 Expected: 4 个测试 PASS；不改变任何桌面窗口。
 
-- [ ] **Step 7: 提交窗口绑定基础**
+- [x] **Step 7: 提交窗口绑定基础**
 
 ```bash
 git add src/lib/video-generator/capture tests/video-generator/capture-source-matcher.unit.test.ts tests/video-generator/windows-window-mode.unit.test.ts
@@ -911,7 +911,7 @@ npm run build:manual-poc
 
 Expected: 所有测试 PASS；Electron POC 构建无类型错误；编译输出中的 HTML、main、preload、renderer 路径与 `BrowserWindow.loadFile()` / `webPreferences.preload` 使用的绝对路径一致。
 
-- [ ] **Step 9: 提交 capture provider**
+- [x] **Step 9: 提交 capture provider**
 
 ```bash
 git add src/lib/video-generator/capture pocs/manual-recording/capture-preload.cts pocs/manual-recording/capture-renderer.ts pocs/manual-recording/capture-renderer.d.ts tests/video-generator/capture-normalize-video.unit.test.ts tests/video-generator/windows-electron.unit.test.ts
@@ -1080,7 +1080,7 @@ test('captures the selected Chromium window on Windows', async () => {
 
 操作员先运行 Electron POC 并退出，再运行 `npm run test:manual-capture-poc`；wrapper 默认检查 `video-runs/manual-poc-borderless-100`，其他运行目录使用 `MANUAL_POC_RUN="<path>" npm run test:manual-capture-poc`。普通 `npm run test` 不运行真实桌面 POC。
 
-- [ ] **Step 7: 运行 F11 模式验收**
+- [x] **Step 7: 运行 F11 模式验收**
 
 Run:
 
@@ -1103,7 +1103,7 @@ Expected:
 - 悬浮窗不出现在画面中。
 - ffprobe：`width=1920`、`height=1080`、`r_frame_rate=30/1`、一个 video stream、零 audio stream。
 
-- [ ] **Step 8: 运行无边框最大化验收**
+- [x] **Step 8: 运行无边框最大化验收**
 
 Run:
 
@@ -1113,7 +1113,7 @@ npm run poc:manual-capture -- --output "video-runs/manual-poc-borderless-100" --
 
 Expected: Chromium 无标题栏并铺满 monitor work area；多标签页仍可用；结束后窗口 style 被恢复；输出规格与 F11 相同。
 
-- [ ] **Step 9: 运行 Windows 缩放矩阵**
+- [x] **Step 9: 运行 Windows 缩放矩阵**
 
 分别把 Windows 显示缩放设置为 125% 和 150%，每次运行：
 
@@ -1126,7 +1126,7 @@ npm run poc:manual-capture -- --output "video-runs/manual-poc-borderless-150" --
 
 Expected: 每个 `capture-poc-report.json` 的 `displayScaleFactor` 分别为 1.25 或 1.5；六个输出均为 1920×1080；没有裁掉浏览器内容；悬浮窗均不入镜。
 
-- [ ] **Step 10: POC 1 独立验收门槛**
+- [x] **Step 10: POC 1 独立验收门槛**
 
 POC 1 只有在以下条件全部满足时通过：
 
@@ -1139,7 +1139,7 @@ F11 与 borderless-maximized 均可结束并恢复桌面状态
 捕获源缺失/歧义时 F7 禁用且无空视频
 ```
 
-- [ ] **Step 11: 提交 POC 1**
+- [x] **Step 11: 提交 POC 1**
 
 ```bash
 git add package.json scripts/verify-manual-poc.mjs src/lib/video-generator/recording/session.ts src/lib/video-generator/recording/poc-report.ts pocs/manual-recording/capture-main.ts tests/video-generator/manual-window-capture-poc.test.ts tests/video-generator/manual-capture-cli.unit.test.ts tests/video-generator/manual-poc-report.unit.test.ts
@@ -1154,7 +1154,7 @@ git commit -m "test: validate Windows Chromium window capture"
 - Create: `src/lib/video-generator/recording/clock.ts`
 - Test: `tests/video-generator/recording-clock.unit.test.ts`
 
-- [ ] **Step 1: 写映射测试**
+- [x] **Step 1: 写映射测试**
 
 ```ts
 import assert from 'node:assert/strict';
@@ -1182,12 +1182,12 @@ test('does not reset session or video time when F7 starts formal recording', () 
 });
 ```
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
 Run: `npx tsx --test tests/video-generator/recording-clock.unit.test.ts`  
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 3: 实现 clock**
+- [x] **Step 3: 实现 clock**
 
 ```ts
 import type { RecordingTimestamp } from './types.js';
@@ -1224,7 +1224,7 @@ export function createRecordingClock(nowNs: () => bigint = process.hrtime.bigint
 
 重复 first-frame 通知不得重置基线；时钟返回值倒退时抛出明确错误。
 
-- [ ] **Step 4: 把 F7/F9/F10 统一交给 clock**
+- [x] **Step 4: 把 F7/F9/F10 统一交给 clock**
 
 `capture-main.ts` 注册：
 
@@ -1236,7 +1236,7 @@ globalShortcut.register('F10', () => session.requestStopConfirmation());
 
 `getDisplayMedia()` 已在操作员点击控制窗“开始捕获”时完成；F7 只标记正式素材区间，不负责创建 display stream，因此全局快捷键不需要 renderer transient activation。`recordUserMarker()` 只能调用 `clock.stamp()`，不能调用 `Date.now()` 或 renderer 的 `performance.now()`。第一次 F10 追加 `recording-stop-requested` 并在 POC 控制窗显示确认；5 秒内再次按 F10 才追加 `recording-stop` 并停止。人工 F10 请求超时后回到 recording；只有 `--duration-seconds` 兜底上限触发的请求在 5 秒无人响应后自动停止并追加 `recording-stop-timeout-confirmed`。F8/Shift+F8 的 Action 指针语义不属于这四个基础 POC，不在本任务注册。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run:
 
@@ -1247,7 +1247,7 @@ npm run build:manual-poc
 
 Expected: PASS；Electron main/preload/renderer 类型一致。
 
-- [ ] **Step 6: 提交统一 clock**
+- [x] **Step 6: 提交统一 clock**
 
 ```bash
 git add src/lib/video-generator/recording/clock.ts tests/video-generator/recording-clock.unit.test.ts pocs/manual-recording/capture-main.ts
@@ -1266,7 +1266,7 @@ git commit -m "feat: add unified recording clock"
 - Test: `tests/video-generator/recording-drift.unit.test.ts`
 - Test: `tests/video-generator/recording-manifest.unit.test.ts`
 
-- [ ] **Step 1: 写 JSONL 追加测试**
+- [x] **Step 1: 写 JSONL 追加测试**
 
 ```ts
 import assert from 'node:assert/strict';
@@ -1289,7 +1289,7 @@ test('appends one durable JSON object per line', async () => {
 });
 ```
 
-- [ ] **Step 2: 实现 append-only log**
+- [x] **Step 2: 实现 append-only log**
 
 ```ts
 import { mkdir, open } from 'node:fs/promises';
@@ -1311,7 +1311,7 @@ export async function createEventLog(filePath: string) {
 
 使用 `'ax'` 拒绝覆盖已有 `events.jsonl`；恢复场景必须创建新 run 或显式版本文件，而不是截断旧日志。
 
-- [ ] **Step 3: 写漂移测试**
+- [x] **Step 3: 写漂移测试**
 
 ```ts
 test('detects residual or duration drift above the duration-scaled threshold', () => {
@@ -1330,7 +1330,7 @@ test('detects residual or duration drift above the duration-scaled threshold', (
 });
 ```
 
-- [ ] **Step 4: 实现漂移分析**
+- [x] **Step 4: 实现漂移分析**
 
 `drift.ts` 输出：
 
@@ -1355,7 +1355,7 @@ export function analyzeClockDrift(
 
 令 `originVideoMs = samples[0].videoTimeMs ?? 0`、`originMediaMs = samples[0].mediaTimeMs`，把每条样本转成 `x = videoTimeMs - originVideoMs`、`y = mediaTimeMs - originMediaMs` 后做普通最小二乘：`slope = covariance(x,y) / variance(x)`、`slopePpm = (slope - 1) * 1_000_000`；每条 residual 为 `mediaTimeMs - (intercept + slope * videoTimeMs)`。`maxObservedDriftMs` 取最大绝对 residual 与 `abs(ffprobeDurationMs - (last.mediaTimeMs - originMediaMs))` 的较大值；`maxAllowedDriftMs = Math.max(250, ffprobeDurationMs * 0.00015)`。少于 3 个 sample、`variance(x) === 0` 或任一字段非有限数时 status 为 `drift-detected`，原因写入 manifest，避免无证据静默通过。
 
-- [ ] **Step 5: 实现 manifest 原子写入**
+- [x] **Step 5: 实现 manifest 原子写入**
 
 `manifest.ts` 先写同目录临时文件，再 rename：
 
@@ -1367,7 +1367,7 @@ await rename(tempPath, manifestPath);
 
 manifest 必须由 ffprobe 实际数据和 drift analysis 构造；规范化成功时使用 `video.status='available'`，规范化失败或不存在正式 MP4 时使用 `video.status='unavailable'` 并记录 stderr 摘要，不伪造宽高/时长。未收到第一帧时 `firstVideoFrameSessionTimeMs=null`、`clockStatus='drift-detected'`、`captureComplete=false`。`clockStatus !== 'ok'` 时 POC CLI 返回非零，但仍保留 manifest 和视频。
 
-- [ ] **Step 6: 运行定向测试**
+- [x] **Step 6: 运行定向测试**
 
 Run:
 
@@ -1377,7 +1377,7 @@ npx tsx --test tests/video-generator/recording-event-log.unit.test.ts tests/vide
 
 Expected: JSONL、阈值边界、manifest 临时文件清理全部 PASS。
 
-- [ ] **Step 7: 提交日志和 drift**
+- [x] **Step 7: 提交日志和 drift**
 
 ```bash
 git add src/lib/video-generator/recording/event-log.ts src/lib/video-generator/recording/drift.ts src/lib/video-generator/recording/manifest.ts tests/video-generator/recording-event-log.unit.test.ts tests/video-generator/recording-drift.unit.test.ts tests/video-generator/recording-manifest.unit.test.ts
@@ -1394,7 +1394,7 @@ git commit -m "feat: add recording clock drift diagnostics"
 - Modify: `pocs/manual-recording/capture-main.ts`
 - Modify: `pocs/manual-recording/capture-renderer.ts`
 
-- [ ] **Step 1: 创建只用于 POC 的时钟 fixture**
+- [x] **Step 1: 创建只用于 POC 的时钟 fixture**
 
 `clock-fixture.html` 显示 30fps 变化的画面、当前 session time 和最近 marker；marker 由 POC IPC 更新 DOM，不执行网页业务动作：
 
@@ -1417,7 +1417,7 @@ git commit -m "feat: add recording clock drift diagnostics"
 </script>
 ```
 
-- [ ] **Step 2: 把 MediaRecorder timecode 写成 clock sample**
+- [x] **Step 2: 把 MediaRecorder timecode 写成 clock sample**
 
 每次 `dataavailable` 除了 append chunk，还发送 `timecode`；main 用统一 clock 盖章，追加：
 
@@ -1427,7 +1427,7 @@ git commit -m "feat: add recording clock drift diagnostics"
 
 不得把 renderer 的 wall clock 直接写入 `sessionTimeMs`。
 
-- [ ] **Step 3: 写 POC 验证器**
+- [x] **Step 3: 写 POC 验证器**
 
 `manual-clock-poc.test.ts` 读取 manifest/events 并断言：
 
@@ -1505,11 +1505,11 @@ git commit -m "test: validate unified recording clock"
 - Create: `tests/fixtures/video-generator/manual-observer-fixture.html`
 - Test: `tests/video-generator/manual-observer.unit.test.ts`
 
-- [ ] **Step 1: 创建 observer 单元测试 fixture**
+- [x] **Step 1: 创建 observer 单元测试 fixture**
 
 `tests/fixtures/video-generator/manual-observer-fixture.html` 包含 button、text input、select、scroll container、pushState 按钮和动态 DOM 替换按钮；它只服务 Task 9 单元测试，不是 POC 3 综合 fixture。
 
-- [ ] **Step 2: 写事件采集失败测试**
+- [x] **Step 2: 写事件采集失败测试**
 
 测试启动该本地 fixture，观察器安装后通过测试驱动执行动作，断言事件，不检查业务结果推断：
 
@@ -1524,12 +1524,12 @@ assert.ok(types.includes('navigation'));
 
 再对 observer 源码导出依赖做静态约束：它不得导入 `./actions.js` 或 `./interaction-rules.js`。
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `npx tsx --test tests/video-generator/manual-observer.unit.test.ts`  
 Expected: FAIL，模块不存在。
 
-- [ ] **Step 4: 实现 browser binding**
+- [x] **Step 4: 实现 browser binding**
 
 `manual-observer.ts` 先调用：
 
@@ -1553,11 +1553,11 @@ addEventListener('hashchange', emitNavigation, { passive: true });
 
 `normalizeEvent()` 只接受 plain object，并将字段白名单化为 string/number/boolean/null；DOM node、Event、函数和循环对象不得通过 IPC。记录 target 的 tag、role、accessible-ish text、name、inputType、valueLength、selectedText、scrollX/scrollY、URL、frameUrl 和 isMainFrame；不调用 `preventDefault()`、`stopPropagation()` 或 `stopImmediatePropagation()`。
 
-- [ ] **Step 5: 覆盖 SPA navigation**
+- [x] **Step 5: 覆盖 SPA navigation**
 
 init script 包装 `history.pushState` 和 `history.replaceState`，调用原函数后发 navigation event；保留原函数参数、return value 和 `this`。
 
-- [ ] **Step 6: 运行刷新和动态 DOM 测试**
+- [x] **Step 6: 运行刷新和动态 DOM 测试**
 
 测试必须：
 
@@ -1568,7 +1568,7 @@ init script 包装 `history.pushState` 和 `history.replaceState`，调用原函
 
 Expected: 两次导航后事件均存在；不需要手工重新 `page.evaluate()` 注入。
 
-- [ ] **Step 7: 提交观察器**
+- [x] **Step 7: 提交观察器**
 
 ```bash
 git add src/lib/video-generator/browser/manual-observer.ts tests/fixtures/video-generator/manual-observer-fixture.html tests/video-generator/manual-observer.unit.test.ts
@@ -1583,7 +1583,7 @@ git commit -m "feat: observe manual browser events"
 - Create: `src/lib/video-generator/browser/tab-observer.ts`
 - Test: `tests/video-generator/tab-observer.unit.test.ts`
 
-- [ ] **Step 1: 写多 Page 测试**
+- [x] **Step 1: 写多 Page 测试**
 
 ```ts
 assert.deepEqual(events.filter((event) => event.type === 'tab-created').map((event) => event.tabId), ['tab-1', 'tab-2']);
@@ -1593,15 +1593,15 @@ assert.ok(events.some((event) => event.type === 'tab-closed' && event.tabId === 
 
 新 tab 内由测试驱动点击后必须产生带 `tab-2` 的 `pointer-click`。这里的 Playwright click 只存在于测试代码，用来模拟用户输入；`manual-observer.ts`、`tab-observer.ts` 和生产 session 不调用 click/fill/bringToFront。
 
-- [ ] **Step 2: 实现稳定 tabId**
+- [x] **Step 2: 实现稳定 tabId**
 
 `tab-observer.ts` 使用 `WeakMap<Page, string>` 和自增序号；`context.pages()` 中已有 Page 先注册，再监听 `context.on('page')`。Page 创建时只绑定 listener，不调用 `bringToFront()`。
 
-- [ ] **Step 3: 实现激活判定**
+- [x] **Step 3: 实现激活判定**
 
 页面 init script 在 `focus` 和 `visibilitychange` 时上报 `{ visibilityState, hasFocus }`；`visibilityState === 'visible' && hasFocus === true` 时记录 `tab-activated`。POC 明确把该事件作为“用户切到该 Page”的可观测代理；如果 Windows/Chromium 实测中手动切 tab 不触发该组合，则 POC 3 判定不通过并在结果文档记录，不能由 Playwright `bringToFront()` 补造事件。连续相同 tab 激活事件去重。
 
-- [ ] **Step 4: 实现导航和关闭事件**
+- [x] **Step 4: 实现导航和关闭事件**
 
 Node 侧监听 main frame `framenavigated` 和 Page `close`，写入：
 
@@ -1610,7 +1610,7 @@ Node 侧监听 main frame `framenavigated` 和 Page `close`，写入：
 {"type":"tab-closed","tabId":"tab-2","payload":{"url":"https://fixture/detail"}}
 ```
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run:
 
@@ -1620,7 +1620,7 @@ npx tsx --test tests/video-generator/tab-observer.unit.test.ts tests/video-gener
 
 Expected: PASS；测试没有调用 observer 内部的业务点击函数。
 
-- [ ] **Step 6: 提交 tab observer**
+- [x] **Step 6: 提交 tab observer**
 
 ```bash
 git add src/lib/video-generator/browser/tab-observer.ts tests/video-generator/tab-observer.unit.test.ts
@@ -1635,7 +1635,7 @@ git commit -m "feat: observe manual browser tabs"
 - Create: `src/lib/video-generator/browser/manual-cursor-overlay.ts`
 - Test: `tests/video-generator/manual-cursor-overlay.unit.test.ts`
 
-- [ ] **Step 1: 写不拦截测试**
+- [x] **Step 1: 写不拦截测试**
 
 测试页面按钮的原生 click handler 增加计数；移动和点击后断言：
 
@@ -1645,7 +1645,7 @@ assert.equal(await page.locator('#__video-generator-manual-cursor').evaluate((el
 assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).cursor), 'none');
 ```
 
-- [ ] **Step 2: 实现 overlay init script**
+- [x] **Step 2: 实现 overlay init script**
 
 复制现有 `cursor-overlay.ts` 的 SVG 视觉到人工专用脚本，但使用独立 id `__video-generator-manual-cursor`，不改动或复用自动 recorder 的 controller；位置完全由真实 `pointermove`：
 
@@ -1669,16 +1669,16 @@ html.__video-generator-hide-native-cursor body,
 html.__video-generator-hide-native-cursor body * { cursor: none !important; }
 ```
 
-- [ ] **Step 3: 验证新 tab 和 reload**
+- [x] **Step 3: 验证新 tab 和 reload**
 
 在 tab-1、tab-2 和 reload 后页面分别触发 pointermove，三处都能找到 overlay。window `blur`、document `visibilitychange`、pointer `pointerout` 且 `relatedTarget === null` 时隐藏 overlay 并移除 `__video-generator-hide-native-cursor` class；下一次 pointermove 再恢复。切出 Chromium 后 overlay 必须隐藏。
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 Run: `npx tsx --test tests/video-generator/manual-cursor-overlay.unit.test.ts`  
 Expected: click count 不受影响、overlay pointer-events none、三种页面生命周期均重新注入。
 
-- [ ] **Step 5: 提交虚拟鼠标**
+- [x] **Step 5: 提交虚拟鼠标**
 
 ```bash
 git add src/lib/video-generator/browser/manual-cursor-overlay.ts tests/video-generator/manual-cursor-overlay.unit.test.ts
@@ -1803,7 +1803,7 @@ git commit -m "test: validate manual event observation"
 - Test: `tests/video-generator/editing-duration.unit.test.ts`
 - Test: `tests/video-generator/editing-validator.unit.test.ts`
 
-- [ ] **Step 1: 定义与设计一致的类型**
+- [x] **Step 1: 定义与设计一致的类型**
 
 ```ts
 export interface EditCanvas { width: 1920; height: 1080; fps: 30; }
@@ -1832,7 +1832,7 @@ export interface PreviewTimeline { version: 1; durationMs: number; segments: Pre
 
 `EditSource.path` 来自可信 POC manifest/source registry；`edit-plan.json` 本身不得自定义任意文件路径。`media-probe.ts` 返回完整 `EditSource`，其中 `id` 由调用方传入，其他媒体字段来自 ffprobe。
 
-- [ ] **Step 2: 写 duration 测试**
+- [x] **Step 2: 写 duration 测试**
 
 ```ts
 assert.equal(calculateEditClipDurationMs({ sourceId: 'original', sourceStartMs: 0, sourceEndMs: 2000, playbackRate: 2 }), 1000);
@@ -1844,7 +1844,7 @@ assert.equal(calculateEditSegmentDurationMs({
 
 short-fade 不重叠，所以不从时长中扣除 120ms。
 
-- [ ] **Step 3: 实现唯一时长算法**
+- [x] **Step 3: 实现唯一时长算法**
 
 ```ts
 export function calculateEditClipDurationMs(clip: EditClip): number {
@@ -1857,7 +1857,7 @@ export function calculateEditSegmentDurationMs(segment: EditPlanSegment): number
 
 preview timeline、validator 和 filtergraph 均调用这两个函数，不各自复制公式。
 
-- [ ] **Step 4: 写 validator 失败矩阵**
+- [x] **Step 4: 写 validator 失败矩阵**
 
 覆盖：未知 source、区间倒置、越界、`playbackRate < 1`、`> 2`、hold `> 5000`、设置 short-fade 的当前或下一 Segment 总时长 `<=120ms`、最后一个 Segment 设置 short-fade、重复 segmentId、空 clips、非 1920×1080/30 canvas。每个错误消息必须包含 JSON path，例如：
 
@@ -1865,7 +1865,7 @@ preview timeline、validator 和 filtergraph 均调用这两个函数，不各�
 segments[1].clips[0].sourceEndMs exceeds source "pickup-001" duration 2000ms
 ```
 
-- [ ] **Step 5: 实现 validator**
+- [x] **Step 5: 实现 validator**
 
 签名：
 
@@ -1875,7 +1875,7 @@ export function validateEditPlan(plan: unknown, sources: readonly EditSource[]):
 
 区间严格要求 `sourceEndMs <= source.durationMs`，不对越界区间静默裁切；ffprobe 容器 duration 的一帧误差由 POC fixture 生成时控制，而不是 validator 放宽。source id 和 segment id 必须唯一；所有 number 字段必须 finite，canvas 必须严格为 1920×1080/30，`hasAudio` 不影响 preview 但必须由 probe 明确记录。
 
-- [ ] **Step 6: 运行测试**
+- [x] **Step 6: 运行测试**
 
 Run:
 
@@ -1885,7 +1885,7 @@ npx tsx --test tests/video-generator/editing-duration.unit.test.ts tests/video-g
 
 Expected: 所有合法/非法矩阵 PASS。
 
-- [ ] **Step 7: 提交 editing 协议**
+- [x] **Step 7: 提交 editing 协议**
 
 ```bash
 git add src/lib/video-generator/editing/types.ts src/lib/video-generator/editing/duration.ts src/lib/video-generator/editing/validator.ts tests/video-generator/editing-duration.unit.test.ts tests/video-generator/editing-validator.unit.test.ts
@@ -1902,7 +1902,7 @@ git commit -m "feat: validate multi-source edit plans"
 - Test: `tests/video-generator/editing-media-probe.unit.test.ts`
 - Test: `tests/video-generator/editing-filtergraph.unit.test.ts`
 
-- [ ] **Step 1: 写 ffprobe JSON 解析测试**
+- [x] **Step 1: 写 ffprobe JSON 解析测试**
 
 输入：
 
@@ -1912,7 +1912,7 @@ git commit -m "feat: validate multi-source edit plans"
 
 Expected: `durationMs=6000`、`fps≈29.97`、`hasAudio=false`。缺少 video stream、duration 非数字、ffprobe stderr 都抛出包含 source path 的错误。
 
-- [ ] **Step 2: 实现 media probe**
+- [x] **Step 2: 实现 media probe**
 
 调用：
 
@@ -1922,7 +1922,7 @@ ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame
 
 输出 `EditSource` 所需元数据；不复用语义为 audio 的 `getAudioDurationMs()`。
 
-- [ ] **Step 3: 写 filtergraph 参数测试**
+- [x] **Step 3: 写 filtergraph 参数测试**
 
 使用 original 和 pickup 两个 source，断言 filtergraph 包含：
 
@@ -1944,7 +1944,7 @@ concat=n=3:v=1:a=0
 
 builder 必须把每个 `clip.playbackRate` 格式化成数值字面量（例如 `2`、`1.5`）后插入表达式；`RATE` 不是 ffmpeg `setpts` 常量，禁止原样输出占位符。`short-fade` 不增加额外黑帧：它把当前 Segment 已有的最后 120ms 逐渐变黑，并把下一 Segment 已有的前 120ms 从黑变亮，因此总时长仍是 clip duration + hold；每段时长必须大于 120ms。
 
-- [ ] **Step 4: 实现纯 filtergraph builder**
+- [x] **Step 4: 实现纯 filtergraph builder**
 
 导出：
 
@@ -1960,7 +1960,7 @@ export function buildEditFiltergraph(plan: EditPlan, sources: readonly EditSourc
 
 source 按首次引用顺序映射 `-i` index；同一 source 只添加一次 input。Segment 内 clips 先 concat；hold 用 `tpad=stop_mode=clone`；short-fade 对当前 Segment 使用 `fade=t=out:st=(segmentDurationMs-120)/1000:d=0.12`，对下一 Segment 使用 `fade=t=in:st=0:d=0.12`，再进行普通 concat。所有秒数字符串通过同一 `formatSeconds()` 生成。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 Run:
 
@@ -1970,7 +1970,7 @@ npx tsx --test tests/video-generator/editing-media-probe.unit.test.ts tests/vide
 
 Expected: source index、Windows 空格路径、filter labels、时长和 transition 全部 PASS。
 
-- [ ] **Step 6: 提交 probe/filtergraph**
+- [x] **Step 6: 提交 probe/filtergraph**
 
 ```bash
 git add src/lib/video-generator/editing/media-probe.ts src/lib/video-generator/editing/filtergraph.ts tests/video-generator/editing-media-probe.unit.test.ts tests/video-generator/editing-filtergraph.unit.test.ts
@@ -1986,7 +1986,7 @@ git commit -m "feat: build multi-source preview filtergraph"
 - Test: `tests/video-generator/editing-preview.unit.test.ts`
 - Test: `tests/video-generator/editing-preview-poc.test.ts`
 
-- [ ] **Step 1: 写 preview renderer 失败测试**
+- [x] **Step 1: 写 preview renderer 失败测试**
 
 在 `tests/video-generator/editing-preview.unit.test.ts` 注入 `RunCommand`，断言：input args 按 `inputSourceIds` 顺序生成、带空格/中文路径保持为单独参数、输出先写 `.tmp.mp4`、ffmpeg 失败消息包含 source/segment/stderr、失败时不创建正式 `preview.mp4`。
 
@@ -1998,7 +1998,7 @@ npx tsx --test tests/video-generator/editing-preview.unit.test.ts
 
 Expected: FAIL，模块 `editing/preview.js` 不存在。
 
-- [ ] **Step 2: 实现 preview renderer**
+- [x] **Step 2: 实现 preview renderer**
 
 签名：
 
@@ -2029,11 +2029,11 @@ ffmpeg 参数由 `built.inputSourceIds` 动态生成，固定结构为：
 
 失败消息必须包含 source ids、segment ids、输出路径和截断后的 stderr；原素材、edit plan 不删除。
 
-- [ ] **Step 3: 原子写 preview timeline**
+- [x] **Step 3: 原子写 preview timeline**
 
 先渲染到 `preview.mp4.tmp.mp4`，ffprobe 验证成功后 rename；`preview-timeline.json` 同样临时写后 rename。渲染失败不得留下名为 `preview.mp4` 的半成品；单元测试注入命令失败时清理临时文件但保留 error 对象中的 stderr。真实 POC 测试成功后删除临时 fixture；失败时把临时目录路径打印到测试诊断并保留，便于复核。
 
-- [ ] **Step 4: 在 POC 测试中生成两个确定性 source**
+- [x] **Step 4: 在 POC 测试中生成两个确定性 source**
 
 不提交二进制 fixture；测试用 ffmpeg lavfi 生成：
 
@@ -2082,7 +2082,7 @@ edit plan：
 
 预期总时长 4500ms。
 
-- [ ] **Step 5: 验证视频 stream 和时间戳结构**
+- [x] **Step 5: 验证视频 stream 和时间戳结构**
 
 执行：
 
@@ -2106,7 +2106,7 @@ duration == 4.5s ± 1 frame
 
 ffmpeg 解码命令退出码为 0，stderr 不得包含 non-monotonous DTS、invalid timestamp 或 decode error。
 
-- [ ] **Step 6: 验证 trim、source、加速、定格和 fade**
+- [x] **Step 6: 验证 trim、source、加速、定格和 fade**
 
 在 0.50s、1.50s、2.50s、4.00s 抽取 1×1 RGB，主色依次为红、绿、黄、蓝。3.05s 和 3.30s 的 `framemd5` 完全一致，证明 3.0–3.5s 为 500ms 黄色末帧定格。短淡化用 0.95s 与 1.05s、3.45s 与 3.55s 四个靠近边界但避开精确切点的帧，与各自 Segment 中部亮度比较；边界帧应显著更暗。
 
@@ -2159,7 +2159,7 @@ npm run test
 
 Expected: typecheck 和全部 `*.unit.test.ts` PASS；现有自动录制测试不得因人工 POC 变更而失败。
 
-- [ ] **Step 2: 运行四个独立 POC**
+- [x] **Step 2: 运行四个独立 POC**
 
 Run:
 
@@ -2224,7 +2224,7 @@ git diff --check
 
 Expected: 只有预期源码、测试和文档；没有 `video-runs/`、`dist/`、MP4、WebM、WAV、临时 JSON 或调试截图被跟踪。
 
-- [ ] **Step 7: 提交 POC 结果与计划状态**
+- [x] **Step 7: 提交 POC 结果与计划状态**
 
 ```bash
 git add docs/research/manual-recording-infrastructure-poc-results.md docs/research/README.md docs/exec-plans/README.md docs/exec-plans/active/manual-recording-infrastructure-pocs.md
@@ -2262,12 +2262,12 @@ git commit -m "docs: record manual recording poc results"
 [x] Electron 43.1.1
 [x] Playwright Chromium 可启动
 [x] ffmpeg/ffprobe 可用且包含 libx264
-[ ] 单显示器 100%/125%/150% 缩放
-[x] F11 与 borderless-maximized（150% 已实测；其余缩放仍待矩阵）
+[x] 单显示器 100%/125%/150% 缩放
+[x] F11 与 borderless-maximized（100%/125%/150% 矩阵 6/6 已实测）
 [x] 同一 Chromium 窗口两个标签页
 [x] overlay 位于 Chromium 上方但不入镜
 [x] 30 分钟持续录制
-[ ] 输出路径包含空格和中文
+[ ] 输出路径包含空格和中文（未作为本轮四个基础设施 POC 的归档阻塞项，留待正式产品计划验证）
 ```
 
 ## 决策日志
@@ -2285,12 +2285,14 @@ git commit -m "docs: record manual recording poc results"
   问题；150% F11/borderless、事件 POC、快捷键短测和 30 分钟漂移均通过。
 - 2026-07-27：30 分钟静态窗口产生 1815 个 MediaRecorder timecode 样本，完整覆盖
   1800 秒且最大间隔 1304ms；以覆盖和最大间隙替代不受规范保证的 7000 chunk 门槛。
+- 2026-07-28：补齐 Windows 125% 和 100% 的 F11/borderless 四次短测；四次报告与
+  独立 verifier 均通过，结合既有 150% 证据完成 6/6 缩放矩阵。
 
 ## 计划完成前自检
 
 ### 规格覆盖
 
-- [ ] POC 1 覆盖指定 Chromium、同窗口多 tab、overlay 不入镜、1920×1080、F11、无边框、125%/150%。
+- [x] POC 1 覆盖指定 Chromium、同窗口多 tab、overlay 不入镜、1920×1080、F11、无边框、100%/125%/150%。
 - [x] POC 2 覆盖 `sessionTimeMs`、`videoTimeMs`、F7/F9/F10、30 分钟漂移。
 - [x] POC 3 覆盖 click/input/change/scroll/navigation/tab、JSONL 追加、新 Page/刷新注入、虚拟指针不拦截。
 - [x] POC 4 覆盖 original + pickup、trim、concat、2×、hold、fade、preview、分辨率/帧率/PTS/stream 结构。
@@ -2301,18 +2303,18 @@ git commit -m "docs: record manual recording poc results"
 执行：
 
 ```bash
-node -e "const fs=require('fs');const p='docs/exec-plans/active/manual-recording-infrastructure-pocs.md';const bad=[['T','BD'].join(''),['T','ODO'].join(''),['implement','later'].join(' '),['适当','处理'].join(''),['类似','Task'].join(' '),['待','补充'].join('')];const text=fs.readFileSync(p,'utf8');const hits=bad.filter(x=>text.includes(x));if(hits.length){console.error(hits);process.exit(1)}"
+node -e "const fs=require('fs');const p='docs/exec-plans/completed/manual-recording-infrastructure-pocs.md';const bad=[['T','BD'].join(''),['T','ODO'].join(''),['implement','later'].join(' '),['适当','处理'].join(''),['类似','Task'].join(' '),['待','补充'].join('')];const text=fs.readFileSync(p,'utf8');const hits=bad.filter(x=>text.includes(x));if(hits.length){console.error(hits);process.exit(1)}"
 ```
 
 Expected: 退出码 0，无输出。
 
 ### 类型一致性检查
 
-- [ ] `RecordingTimestamp` 在 clock、event log、manifest 使用同一字段名。
-- [ ] `EditClip.playbackRate` 在 validator、duration、filtergraph 使用同一范围和公式。
-- [ ] `short-fade` 在 validator、timeline、filtergraph 均为 120ms 非重叠语义。
-- [ ] `original-window.mp4`、`events.jsonl`、`recording-manifest.json`、`preview.mp4` 的路径在 artifacts、POC 和文档一致。
-- [ ] Electron main/preload/renderer IPC channel 名完全一致。
+- [x] `RecordingTimestamp` 在 clock、event log、manifest 使用同一字段名。
+- [x] `EditClip.playbackRate` 在 validator、duration、filtergraph 使用同一范围和公式。
+- [x] `short-fade` 在 validator、timeline、filtergraph 均为 120ms 非重叠语义。
+- [x] `original-window.mp4`、`events.jsonl`、`recording-manifest.json`、`preview.mp4` 的路径在 artifacts、POC 和文档一致。
+- [x] Electron main/preload/renderer IPC channel 名完全一致。
 
 ## 后续边界
 

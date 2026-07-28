@@ -43,11 +43,11 @@
 | active/continuous-video-recording.md | 连续操作视频录制：1920×1080 全脚本连续录制、selector 滚动等待、字幕规范化、Pacdora 可见路径 | 最终验证完成，待提交/归档 |
 | active/video-generator-recording-reliability.md | 视频生成器真实业务录制可靠性：preflight dry-run、脚本三稿、新动作语法、报告脱敏、产物目录基础规范化 | P0 已完成，Phase 4-5 待开始 |
 | active/video-generator-stage-diagnostics.md | 视频生成器录制可靠性二期：Stage 别名与失败诊断包 | Phase 0 完成，Phase 1-5 待开始 |
-| active/manual-recording-infrastructure-pocs.md | 人工录制 + Agent 辅助剪辑第一阶段：Windows 窗口捕获、统一时钟、页面事件/虚拟鼠标、多源 preview 四个基础 POC | POC 2-4 通过；POC 1 的 150% 通过，100%/125% 待验收 |
-| active/manual-recording-poc-acceptance-remediation.md | 人工录制 POC 实机验收问题修复：Windows 真无边框、报告门槛、漂移指标拆分和 marker 画面证据 | 修复与 150%/短测/30 分钟实测完成；待 POC 1 缩放矩阵 |
 | active/agent-sdk-0-2-111-adoption.md | Agent SDK 0.2.111 能力采纳（Codex 审核后双层化 + 用户视角推进路线图）：Layer A 已完成 Phase 1 chip + Phase 2b 类型适配 / 待做 Phase 1b chip 按钮 + Phase 2 限流 UI；Layer B 待 POC 后推进 WarmQuery / session fork / getContextUsage / 新 hooks / Elicitation / Deferred tools | SDK 升级已完成，下一步阶段 1（chip 按钮 + 限流 UI）1-2 周可发版 |
 | active/v0.48-post-release-issues.md | v0.48.0/0.48.1 发版后问题追查（已归档至 issue-tracker.md，保留原始记录） | 已归档 |
 ### Completed
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| completed/manual-recording-infrastructure-pocs.md | 人工录制 + Agent 辅助剪辑第一阶段：Windows 窗口捕获、统一时钟、页面事件/虚拟鼠标、多源 preview 四个基础 POC | 2026-07-28 |
+| completed/manual-recording-poc-acceptance-remediation.md | 人工录制 POC 实机验收修复：Windows 真无边框、报告门槛、漂移拆分、marker 画面证据及 6/6 DPI 矩阵 | 2026-07-28 |
 | completed/scripted-browser-video-generator.md | 脚本驱动浏览器教程视频生成器：自然语言脚本 → Playwright 浏览器录制 → 阿里云 TTS → 字幕 → ffmpeg 合成 | 2026-05-21 |
