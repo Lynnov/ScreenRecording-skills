@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual Recording Overlay</title>
+  <style>
+    :root { color-scheme: dark; font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif; }
+    body { margin: 0; background: transparent; color: #f8f0d8; }
+    main { width: 360px; border: 1px solid rgba(248, 214, 125, .45); border-radius: 18px; background: linear-gradient(135deg, rgba(22, 24, 28, .92), rgba(44, 37, 25, .88)); box-shadow: 0 18px 60px rgba(0,0,0,.36); overflow: hidden; }
+    header { padding: 12px 14px; background: rgba(248, 214, 125, .12); -webkit-app-region: drag; cursor: move; }
+    [data-drag-region] { user-select: none; }
+    h1 { margin: 0; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #f8d67d; }
+    section { padding: 12px 14px; display: grid; gap: 8px; }
+    dl { margin: 0; display: grid; grid-template-columns: 92px 1fr; row-gap: 6px; column-gap: 10px; font-size: 12px; }
+    dt { color: rgba(248, 240, 216, .62); }
+    dd { margin: 0; color: #fff9ea; }
+    #timer { font-variant-numeric: tabular-nums; font-size: 20px; color: #8ff0c7; }
+    .warning { color: #ffb86b; }
+    .notice { color: #8cc8ff; }
+    .controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    button { -webkit-app-region: no-drag; border: 1px solid rgba(248,214,125,.42); border-radius: 10px; background: rgba(248,214,125,.12); color: #fff9ea; padding: 8px 10px; font-weight: 700; }
+    button:hover { background: rgba(248,214,125,.22); }
+  </style>
+</head>
+<body>
+  <main>
+    <header data-drag-region>
+      <h1>Manual Recording Console</h1>
+    </header>
+    <section>
+      <div id="timer">00:00.000</div>
+      <dl>
+        <dt>状态</dt><dd id="status">preparing</dd>
+        <dt>Segment</dt><dd id="segment">segment-001</dd>
+        <dt>Action</dt><dd id="action">action-001</dd>
+        <dt>Attempt</dt><dd id="attempt">1</dd>
+        <dt>下一步</dt><dd id="next-step">等待开始</dd>
+        <dt>置信度</dt><dd id="confidence">manual</dd>
+        <dt>Observer</dt><dd id="observer-warning" class="warning">无异常</dd>
+        <dt>新标签</dt><dd id="new-tab-notice" class="notice">无</dd>
+      </dl>
+      <div class="controls">
+        <button type="button" data-command="begin-countdown">F7 开始</button>
+        <button type="button" data-command="confirm-action">F8 确认</button>
+        <button type="button" data-command="previous-action">Shift+F8 回退</button>
+        <button type="button" data-command="discard-attempt">F9 重录</button>
+        <button type="button" data-command="finish">F10 结束</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

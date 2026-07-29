@@ -292,7 +292,7 @@ async function fillByText(page: Page, text: string, value: string, timeoutMs: nu
 async function fillLocator(locator: Locator, value: string, timeoutMs: number, cursor: CursorOverlayController): Promise<void> {
   const target = await resolveActionLocator(locator, timeoutMs);
   const isEditable = await target.evaluate((element) => ['INPUT', 'TEXTAREA'].includes(element.tagName)
-    || element.isContentEditable, undefined, { timeout: timeoutMs });
+    || (element instanceof HTMLElement && element.isContentEditable), undefined, { timeout: timeoutMs });
   if (!isEditable) {
     throw new Error('Target is not editable.');
   }

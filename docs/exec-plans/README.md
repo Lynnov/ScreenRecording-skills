@@ -48,6 +48,13 @@
 ### Completed
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| completed/manual-recording-product-capture-runtime-remediation.md | 人工录制正式 Capture Runtime 回补：Electron capture session、overlay/controller bridge、record/pickup 默认产品路径 | 2026-07-29 |
 | completed/manual-recording-infrastructure-pocs.md | 人工录制 + Agent 辅助剪辑第一阶段：Windows 窗口捕获、统一时钟、页面事件/虚拟鼠标、多源 preview 四个基础 POC | 2026-07-28 |
 | completed/manual-recording-poc-acceptance-remediation.md | 人工录制 POC 实机验收修复：Windows 真无边框、报告门槛、漂移拆分、marker 画面证据及 6/6 DPI 矩阵 | 2026-07-28 |
 | completed/scripted-browser-video-generator.md | 脚本驱动浏览器教程视频生成器：自然语言脚本 → Playwright 浏览器录制 → 阿里云 TTS → 字幕 → ffmpeg 合成 | 2026-05-21 |
+
+## 2026-07-29 补充索引
+
+| 文件 | 主题 | 完成时间 |
+|---|---|---|
+| completed/manual-recording-agent-editing-productization.md | 人工录制与 Agent 辅助剪辑完整产品链路 | 2026-07-29 |

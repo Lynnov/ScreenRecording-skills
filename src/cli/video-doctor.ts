@@ -1,5 +1,5 @@
 import { exec } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ export interface DoctorCheck {
   status: DoctorStatus;
   detail: string;
   agentAdvice?: string;
+  blocking?: boolean;
 }
 
 interface CommandResult {
@@ -36,6 +37,8 @@ export interface RunVideoDoctorChecksInput {
   env?: NodeJS.ProcessEnv;
   runCommand?: (command: string, args: string[]) => Promise<CommandResult>;
   getPlaywrightExecutablePath?: () => string;
+  platform?: NodeJS.Platform;
+  outputDir?: string;
 }
 
 export async function runVideoDoctorCli(argv: string[], io: VideoDoctorCliIo = {}): Promise<number> {
@@ -48,7 +51,7 @@ export async function runVideoDoctorCli(argv: string[], io: VideoDoctorCliIo = {
   }
 
   const checks = await (io.runChecks ?? (() => runVideoDoctorChecks({ cwd: io.cwd, env: io.env })))();
-  const missingCount = checks.filter((check) => check.status === 'missing').length;
+  const missingCount = checks.filter((check) => check.status === 'missing' && check.blocking !== false).length;
 
   stdout(formatDoctorReport(checks));
 
@@ -66,9 +69,13 @@ export async function runVideoDoctorChecks(input: RunVideoDoctorChecksInput = {}
   const env = await loadProjectEnv(cwd, input.env ?? process.env);
   const runCommand = input.runCommand ?? runSystemCommand;
   const getPlaywrightExecutablePath = input.getPlaywrightExecutablePath ?? (() => chromium.executablePath());
+  const platform = input.platform ?? process.platform;
 
   const checks: DoctorCheck[] = [];
-  checks.push({ name: 'Node.js', status: 'ok', detail: process.version });
+  checks.push(platform === 'win32'
+    ? { name: 'Windows', status: 'ok', detail: platform }
+    : { name: 'Windows', status: 'missing', detail: `manual recording requires win32, got ${platform}` });
+  checks.push(checkNodeVersion());
   checks.push(await checkCommand('npm', ['--version'], {
     okName: 'npm',
     missingDetail: 'npm command is not available',
@@ -80,11 +87,22 @@ export async function runVideoDoctorChecks(input: RunVideoDoctorChecksInput = {}
     missingDetail: 'node_modules not found',
     agentAdvice: '请向用户说明需要安装项目依赖，获得授权后运行：npm install',
   }));
+  checks.push(await checkPath(path.join(cwd, 'node_modules', 'electron', 'dist', 'electron.exe'), {
+    name: 'Electron',
+    okDetail: 'electron.exe exists',
+    missingDetail: 'Electron executable not found',
+    agentAdvice: 'Install project dependencies before using manual recording.',
+  }));
   checks.push(checkPlaywrightChromium(getPlaywrightExecutablePath));
   checks.push(await checkCommand('ffmpeg', ['-version'], {
     okName: 'ffmpeg',
     missingDetail: 'ffmpeg command is not available',
     agentAdvice: '请根据当前系统选择安装方式；Windows 可优先尝试 winget 安装 Gyan.FFmpeg，执行前必须请求用户授权。',
+  }, runCommand));
+  checks.push(await checkCommandOutput('ffmpeg', ['-encoders'], 'libx264', {
+    name: 'ffmpeg libx264',
+    missingDetail: 'ffmpeg does not report the libx264 encoder',
+    agentAdvice: 'Install an ffmpeg build with libx264 enabled.',
   }, runCommand));
   checks.push(await checkCommand('ffprobe', ['-version'], {
     okName: 'ffprobe',
@@ -92,6 +110,7 @@ export async function runVideoDoctorChecks(input: RunVideoDoctorChecksInput = {}
     agentAdvice: 'ffprobe 通常随 ffmpeg 一起安装；请请求用户授权后安装或修复 ffmpeg。',
   }, runCommand));
   checks.push(checkEnvKey(env));
+  checks.push(await checkWritableOutput(input.outputDir ?? path.join(cwd, 'video-runs')));
   checks.push(await checkPath(path.join(cwd, 'examples', 'video-generator', 'basic-demo.md'), {
     name: 'basic demo script',
     okDetail: 'examples/video-generator/basic-demo.md exists',
@@ -100,6 +119,14 @@ export async function runVideoDoctorChecks(input: RunVideoDoctorChecksInput = {}
   }));
 
   return checks;
+}
+
+function checkNodeVersion(): DoctorCheck {
+  const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
+  const supported = major > 22 || (major === 22 && minor >= 12);
+  return supported
+    ? { name: 'Node.js', status: 'ok', detail: process.version }
+    : { name: 'Node.js', status: 'missing', detail: `Node.js >=22.12.0 required, got ${process.version}` };
 }
 
 function formatDoctorReport(checks: DoctorCheck[]): string {
@@ -123,6 +150,22 @@ async function checkCommand(command: string, args: string[], input: {
     return { name: input.okName, status: 'ok', detail: firstLine ?? `${command} is available` };
   } catch {
     return { name: input.okName, status: 'missing', detail: input.missingDetail, agentAdvice: input.agentAdvice };
+  }
+}
+
+async function checkCommandOutput(
+  command: string,
+  args: string[],
+  expected: string,
+  input: { name: string; missingDetail: string; agentAdvice: string },
+  runCommand: (command: string, args: string[]) => Promise<CommandResult>,
+): Promise<DoctorCheck> {
+  try {
+    const result = await runCommand(command, args);
+    if (!result.stdout.includes(expected)) throw new Error(input.missingDetail);
+    return { name: input.name, status: 'ok', detail: `${expected} available` };
+  } catch {
+    return { name: input.name, status: 'missing', detail: input.missingDetail, agentAdvice: input.agentAdvice };
   }
 }
 
@@ -169,8 +212,27 @@ function checkEnvKey(env: NodeJS.ProcessEnv): DoctorCheck {
     name: 'DASHSCOPE_API_KEY',
     status: 'missing',
     detail: 'environment variable is empty',
+    blocking: false,
     agentAdvice: '请向用户索取 DashScope API Key，获得授权后写入本机 .env 或当前终端环境。',
   };
+}
+
+async function checkWritableOutput(outputDir: string): Promise<DoctorCheck> {
+  const probePath = path.join(outputDir, `.write-probe-${process.pid}`);
+  try {
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(probePath, 'ok', { flag: 'wx' });
+    await rm(probePath, { force: true });
+    return { name: 'manual output directory', status: 'ok', detail: outputDir };
+  } catch (error) {
+    await rm(probePath, { force: true }).catch(() => undefined);
+    return {
+      name: 'manual output directory',
+      status: 'missing',
+      detail: error instanceof Error ? error.message : String(error),
+      agentAdvice: 'Choose a writable --output directory.',
+    };
+  }
 }
 
 if (process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1]) {

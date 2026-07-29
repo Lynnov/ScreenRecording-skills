@@ -1,4 +1,5 @@
 import type { Timeline, TimelineSegment } from './types.js';
+import type { FinalTimeline } from './manual/final-timeline.js';
 
 export function renderSrt(timeline: Timeline): string {
   let cursorMs = 0;
@@ -16,6 +17,17 @@ export function renderSrt(timeline: Timeline): string {
         '',
       ].join('\n');
     })
+    .join('\n');
+}
+
+export function renderFinalTimelineSrt(timeline: FinalTimeline): string {
+  return timeline.segments
+    .map((segment, index) => [
+      String(index + 1),
+      `${formatSrtTimestamp(segment.subtitleStartMs)} --> ${formatSrtTimestamp(segment.subtitleEndMs)}`,
+      normalizeSubtitleText(segment.narrationText),
+      '',
+    ].join('\n'))
     .join('\n');
 }
 

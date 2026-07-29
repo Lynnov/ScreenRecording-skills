@@ -106,3 +106,41 @@ test('runVideoDoctorCli returns non-zero and prints agent guidance for missing c
   assert.match(stdout.join('\n'), /DASHSCOPE_API_KEY: missing/);
   assert.match(stdout.join('\n'), /发现 2 项需要处理/);
 });
+
+test('missing DashScope key is non-blocking for manual stages before finalize', async () => {
+  const { stdout, io } = makeIo([
+    { name: 'Windows', status: 'ok', detail: 'win32' },
+    { name: 'DASHSCOPE_API_KEY', status: 'missing', detail: 'finalize unavailable', blocking: false },
+  ]);
+  assert.equal(await runVideoDoctorCli([], io), 0);
+  assert.match(stdout.join('\n'), /DASHSCOPE_API_KEY: missing/);
+});
+
+test('manual doctor checks Windows Electron libx264 and writable output', async () => {
+  const projectDir = path.join(tmpdir(), `video-doctor-manual-${process.pid}-${Date.now()}`);
+  await mkdir(path.join(projectDir, 'node_modules', 'electron', 'dist'), { recursive: true });
+  await mkdir(path.join(projectDir, 'examples', 'video-generator'), { recursive: true });
+  await writeFile(path.join(projectDir, 'node_modules', 'electron', 'dist', 'electron.exe'), '');
+  await writeFile(path.join(projectDir, 'examples', 'video-generator', 'basic-demo.md'), 'demo');
+  try {
+    const commands: string[] = [];
+    const checks = await runVideoDoctorChecks({
+      cwd: projectDir,
+      env: {},
+      platform: 'win32',
+      outputDir: path.join(projectDir, 'video-runs'),
+      getPlaywrightExecutablePath: () => 'chromium.exe',
+      runCommand: async (command, args) => {
+        commands.push([command, ...args].join(' '));
+        return { stdout: command === 'ffmpeg' && args[0] === '-encoders' ? ' V..... libx264 H.264' : `${command} ok` };
+      },
+    });
+    assert.equal(checks.find((check) => check.name === 'Windows')?.status, 'ok');
+    assert.equal(checks.find((check) => check.name === 'Electron')?.status, 'ok');
+    assert.equal(checks.find((check) => check.name === 'ffmpeg libx264')?.status, 'ok');
+    assert.equal(checks.find((check) => check.name === 'manual output directory')?.status, 'ok');
+    assert.ok(commands.includes('ffmpeg -encoders'));
+  } finally {
+    await rm(projectDir, { recursive: true, force: true });
+  }
+});

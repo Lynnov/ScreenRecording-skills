@@ -17,9 +17,12 @@ export interface CaptureClockSample extends RecordingTimestamp {
 
 export interface RecordingAttempt {
   actionId: string;
+  segmentId: string;
+  sourceId: string;
   attempt: number;
   startMs: number;
   endMs: number | null;
+  confirmedAtMs: number | null;
   status: 'recording' | 'discarded' | 'confirmed';
 }
 

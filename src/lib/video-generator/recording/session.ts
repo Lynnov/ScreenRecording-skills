@@ -27,10 +27,23 @@ export interface ManualChromiumSession {
   close(): Promise<void>;
 }
 
+export interface ProductManualChromiumSession {
+  browser: Browser;
+  context: BrowserContext;
+  page: Page;
+  bindingTitle: string;
+  navigateToStartUrl(): Promise<void>;
+  close(): Promise<void>;
+}
+
 interface ManualObserverInstallers {
   manual: typeof installManualObserver;
   cursor: typeof installManualCursorOverlay;
   tabs: typeof installTabObserver;
+}
+
+export interface ManualChromiumPlaywrightAdapter {
+  launch(options: { headless: false; args: string[] }): Promise<Browser>;
 }
 
 export interface ManualCaptureObservers {
@@ -48,6 +61,36 @@ export interface TimestampedObserverEventSink {
   readonly eventCaptureComplete: boolean;
   onEvent(event: ObserverInputEvent): Promise<void>;
   flush(): Promise<void>;
+}
+
+export function createManualChromiumSessionLifecycle(input: {
+  observers: Pick<ManualCaptureObservers, 'flush'>;
+  sink: Pick<TimestampedObserverEventSink, 'flush'>;
+  eventLog: { close(): Promise<void> };
+  session: { close(): Promise<void> };
+}): { close(): Promise<void> } {
+  let closePromise: Promise<void> | undefined;
+  return {
+    close() {
+      closePromise ??= (async () => {
+        let firstError: unknown;
+        for (const closeStep of [
+          () => input.observers.flush(),
+          () => input.sink.flush(),
+          () => input.eventLog.close(),
+          () => input.session.close(),
+        ]) {
+          try {
+            await closeStep();
+          } catch (error) {
+            firstError ??= error;
+          }
+        }
+        if (firstError !== undefined) throw firstError;
+      })();
+      return closePromise;
+    },
+  };
 }
 
 export function createTimestampedObserverEventSink(input: {
@@ -199,25 +242,104 @@ export async function launchManualChromiumSession(input: {
   sessionId: string;
   fixtureDir: string;
 }): Promise<ManualChromiumSession> {
-  const browser = await chromium.launch({ headless: false, args: ['--start-maximized'] });
-  const context = await browser.newContext({ viewport: null });
-  const page = await context.newPage();
-  const bindingTitle = `VG-CAPTURE-${input.sessionId}`;
-  await page.setContent(`<title>${bindingTitle}</title><main>正在绑定窗口…</main>`);
-  await page.waitForFunction((title) => ((globalThis as unknown) as { document: { title: string } }).document.title === title, bindingTitle);
+  const session = await launchBoundManualChromiumSession({ sessionId: input.sessionId, playwright: chromium });
 
   return {
-    browser,
-    context,
-    page,
-    bindingTitle,
+    ...session,
     async navigateToFixture(fixture) {
       const fixturePath = path.join(input.fixtureDir, manualPocFixtureFileName(fixture));
-      await page.goto(pathToFileURL(fixturePath).href);
+      await session.page.goto(pathToFileURL(fixturePath).href);
     },
-    async close() {
-      await context.close();
-      await browser.close();
+  };
+}
+
+function validateProductStartUrl(startUrl: string): string {
+  try {
+    const url = new URL(startUrl);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error();
+  } catch {
+    throw new Error('startUrl must be a valid http or https URL');
+  }
+  return startUrl;
+}
+
+function bindingTitleForSession(sessionId: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(sessionId)) {
+    throw new Error('sessionId must be a non-empty safe token containing only letters, numbers, ".", "_", or "-"');
+  }
+  return `VG-CAPTURE-${sessionId}`;
+}
+
+async function launchBoundManualChromiumSession(input: {
+  sessionId: string;
+  playwright: ManualChromiumPlaywrightAdapter;
+}): Promise<Omit<ManualChromiumSession, 'navigateToFixture'>> {
+  const bindingTitle = bindingTitleForSession(input.sessionId);
+  let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
+  try {
+    browser = await input.playwright.launch({ headless: false, args: ['--start-maximized'] });
+    context = await browser.newContext({ viewport: null });
+    const page = await context.newPage();
+    await page.setContent(`<title>${bindingTitle}</title><main>正在绑定窗口…</main>`);
+    await page.waitForFunction(
+      (title) => ((globalThis as unknown) as { document: { title: string } }).document.title === title,
+      bindingTitle,
+    );
+    let closePromise: Promise<void> | undefined;
+    return {
+      browser,
+      context,
+      page,
+      bindingTitle,
+      close() {
+        closePromise ??= (async () => {
+          let firstError: unknown;
+          try {
+            await context?.close();
+          } catch (error) {
+            firstError = error;
+          }
+          try {
+            await browser?.close();
+          } catch (error) {
+            firstError ??= error;
+          }
+          if (firstError !== undefined) throw firstError;
+        })();
+        return closePromise;
+      },
+    };
+  } catch (error) {
+    try { await context?.close(); } catch {}
+    try { await browser?.close(); } catch {}
+    throw error;
+  }
+}
+
+export async function launchProductManualChromiumSession(input: {
+  sessionId: string;
+  startUrl: string;
+  playwright?: ManualChromiumPlaywrightAdapter;
+}): Promise<ProductManualChromiumSession> {
+  const startUrl = validateProductStartUrl(input.startUrl);
+  const session = await launchBoundManualChromiumSession({
+    sessionId: input.sessionId,
+    playwright: input.playwright ?? chromium,
+  });
+  let navigationPromise: Promise<void> | undefined;
+  return {
+    ...session,
+    navigateToStartUrl() {
+      navigationPromise ??= (async () => {
+        try {
+          await session.page.goto(startUrl);
+        } catch (error) {
+          try { await session.close(); } catch {}
+          throw error;
+        }
+      })();
+      return navigationPromise;
     },
   };
 }

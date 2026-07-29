@@ -12,15 +12,19 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 export interface ManualRunArtifacts {
   outputDir: string;
+  scriptsDir: string;
+  agentDir: string;
   captureDir: string;
   pickupsDir: string;
   editDir: string;
+  audioDir: string;
   reportsDir: string;
   rawVideoPath: string;
   originalVideoPath: string;
   eventsPath: string;
   tabsPath: string;
   manifestPath: string;
+  sourceCatalogPath: string;
   previewTimelinePath: string;
   previewVideoPath: string;
   capturePocReportPath: string;
@@ -33,21 +37,28 @@ export interface ManualRunArtifacts {
 }
 
 export function createManualRunArtifacts(outputDir: string): ManualRunArtifacts {
+  const scriptsDir = path.join(outputDir, 'scripts');
+  const agentDir = path.join(outputDir, 'agent');
   const captureDir = path.join(outputDir, 'capture');
   const pickupsDir = path.join(outputDir, 'pickups');
   const editDir = path.join(outputDir, 'edit');
+  const audioDir = path.join(outputDir, 'audio');
   const reportsDir = path.join(outputDir, 'reports');
   return {
     outputDir,
+    scriptsDir,
+    agentDir,
     captureDir,
     pickupsDir,
     editDir,
+    audioDir,
     reportsDir,
     rawVideoPath: path.join(captureDir, 'raw-window.webm'),
     originalVideoPath: path.join(captureDir, 'original-window.mp4'),
     eventsPath: path.join(captureDir, 'events.jsonl'),
     tabsPath: path.join(captureDir, 'tabs.json'),
     manifestPath: path.join(captureDir, 'recording-manifest.json'),
+    sourceCatalogPath: path.join(captureDir, 'source-catalog.json'),
     previewTimelinePath: path.join(editDir, 'preview-timeline.json'),
     previewVideoPath: path.join(editDir, 'preview.mp4'),
     capturePocReportPath: path.join(reportsDir, 'capture-poc-report.json'),
@@ -62,9 +73,12 @@ export function createManualRunArtifacts(outputDir: string): ManualRunArtifacts 
 
 export async function ensureManualRunArtifactDirs(artifacts: ManualRunArtifacts): Promise<void> {
   await Promise.all([
+    mkdir(artifacts.scriptsDir, { recursive: true }),
+    mkdir(artifacts.agentDir, { recursive: true }),
     mkdir(artifacts.captureDir, { recursive: true }),
     mkdir(artifacts.pickupsDir, { recursive: true }),
     mkdir(artifacts.editDir, { recursive: true }),
+    mkdir(artifacts.audioDir, { recursive: true }),
     mkdir(artifacts.reportsDir, { recursive: true }),
     mkdir(artifacts.captureEvidenceFramesDir, { recursive: true }),
     mkdir(artifacts.markerEvidenceDir, { recursive: true }),

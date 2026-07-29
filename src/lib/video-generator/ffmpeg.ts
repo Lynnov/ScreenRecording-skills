@@ -1,9 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
 import type { RunCommand } from './audio.js';
+import { buildEditFiltergraph } from './editing/filtergraph.js';
+import type { EditPlan, EditSource } from './editing/types.js';
 import { VideoGeneratorError, type Timeline } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +17,23 @@ export interface RenderFinalVideoInput {
   audioPath?: string;
   subtitlesPath?: string;
   runCommand?: RunCommand;
+}
+
+export interface RenderManualFinalVideoInput {
+  plan: EditPlan;
+  sources: readonly EditSource[];
+  audioPath: string;
+  subtitlesPath: string;
+  outputPath: string;
+  runCommand?: RunCommand;
+}
+
+export interface ProbedFinalVideo {
+  durationMs: number;
+  width: number;
+  height: number;
+  fps: number;
+  codecName: string;
 }
 
 export async function assertFfmpegAvailable(runCommand: RunCommand = defaultRunCommand): Promise<void> {
@@ -97,6 +116,81 @@ export async function renderFinalVideo(input: RenderFinalVideoInput): Promise<st
   }
 
   return finalVideoPath;
+}
+
+export async function renderManualFinalVideo(input: RenderManualFinalVideoInput): Promise<string> {
+  const runCommand = input.runCommand ?? defaultRunCommand;
+  const built = buildEditFiltergraph(input.plan, input.sources);
+  const sourceById = new Map(input.sources.map((source) => [source.id, source]));
+  const temporaryPath = `${input.outputPath}.tmp.mp4`;
+  const args = ['-hide_banner', '-loglevel', 'error'];
+  for (const sourceId of built.inputSourceIds) args.push('-i', sourceById.get(sourceId)!.path);
+  args.push('-i', input.audioPath);
+  const outputLabel = '[manual-final-video]';
+  args.push(
+    '-filter_complex',
+    `${built.filterComplex};${built.outputLabel}subtitles='${escapeFilterPath(input.subtitlesPath)}'${outputLabel}`,
+    '-map',
+    outputLabel,
+    '-map',
+    `${built.inputSourceIds.length}:a`,
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    '-r',
+    '30',
+    '-c:a',
+    'aac',
+    '-movflags',
+    '+faststart',
+    '-shortest',
+    '-y',
+    temporaryPath,
+  );
+  await mkdir(path.dirname(input.outputPath), { recursive: true });
+  await rm(temporaryPath, { force: true });
+  try {
+    const result = await runCommand('ffmpeg', args);
+    if (result.stderr.trim().length > 0) throw Object.assign(new Error('ffmpeg failed'), result);
+    await rename(temporaryPath, input.outputPath);
+    return input.outputPath;
+  } catch (error) {
+    await Promise.allSettled([rm(temporaryPath, { force: true }), rm(input.outputPath, { force: true })]);
+    throw new VideoGeneratorError('FFMPEG_FAILED', formatFfmpegFailureMessage(`Failed to render manual final video at ${input.outputPath}.`, error));
+  }
+}
+
+export async function probeFinalVideo(
+  filePath: string,
+  runCommand: RunCommand = defaultRunCommand,
+): Promise<ProbedFinalVideo> {
+  try {
+    const result = await runCommand('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'stream=codec_type,codec_name,width,height,r_frame_rate:format=duration',
+      '-of', 'json',
+      filePath,
+    ]);
+    const parsed = JSON.parse(result.stdout) as {
+      streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; r_frame_rate?: string }>;
+      format?: { duration?: string };
+    };
+    const video = parsed.streams?.find((stream) => stream.codec_type === 'video');
+    const durationMs = Math.round(Number(parsed.format?.duration) * 1000);
+    const fpsParts = video?.r_frame_rate?.split('/').map(Number);
+    const fps = fpsParts?.length === 2 && fpsParts[1] !== 0 ? fpsParts[0]! / fpsParts[1]! : Number.NaN;
+    if (!video || !Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(fps)) throw new Error('invalid final media metadata');
+    return {
+      durationMs,
+      width: video.width ?? 0,
+      height: video.height ?? 0,
+      fps,
+      codecName: video.codec_name ?? '',
+    };
+  } catch (error) {
+    throw new VideoGeneratorError('FFPROBE_FAILED', formatFfmpegFailureMessage(`Failed to verify final video at ${filePath}.`, error));
+  }
 }
 
 function buildFilterComplex(timeline: Timeline, subtitlesPath: string | undefined): string | undefined {

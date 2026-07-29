@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Manual Recording Review</title>
+  <link rel="stylesheet" href="./review.css">
+</head>
+<body>
+  <main class="review-shell">
+    <aside id="segment-list" class="pane segment-list"></aside>
+    <section id="preview-pane" class="pane preview-pane">
+      <video id="segment-preview" controls loop></video>
+      <div id="timeline-strip"></div>
+    </section>
+    <aside id="decision-pane" class="pane decision-pane">
+      <h1>审核 Segment</h1>
+      <p id="agent-reason"></p>
+      <label>状态
+        <select id="review-status">
+          <option value="approved">approved</option>
+          <option value="pickup-required">pickup-required</option>
+          <option value="rejected">rejected</option>
+        </select>
+      </label>
+      <label>起点 <input id="boundary-start" type="number" min="0"></label>
+      <label>终点 <input id="boundary-end" type="number" min="0"></label>
+      <label>素材 <select id="source-select"></select></label>
+      <label>等待策略
+        <select id="wait-strategy">
+          <option value="keep">keep</option>
+          <option value="compress">compress</option>
+        </select>
+      </label>
+      <textarea id="review-reasons" aria-label="审核理由"></textarea>
+      <button id="save-review" type="button">保存审核</button>
+    </aside>
+  </main>
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>
