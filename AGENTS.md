@@ -94,3 +94,10 @@
 - `docs/future/` — 暂未排期的方向和想法
 
 **检索前先读对应目录的 README.md；增删文件后更新索引。**
+
+## 人工录制产品验证
+
+- 自动回归：`npm run test:manual-product`
+- 分阶段验证：`npm run verify:manual -- --run <run> --stage <guide|capture|preview|review|pickup|final>`
+- 无人值守 E2E 使用 stub Agent、注入式 capture/TTS 和真实 ffmpeg；不得冒充人工桌面 record/pickup 验收。
+- 真实桌面录制仍需在交互式 Windows 会话中单独执行。

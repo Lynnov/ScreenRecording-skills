@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual Product Capture Smoke</title>
+  <style>
+    body { margin: 0; font: 18px/1.5 system-ui, sans-serif; background: #f3f6fb; color: #172033; }
+    main { width: min(760px, calc(100% - 48px)); margin: 64px auto; padding: 32px; background: white; border-radius: 18px; box-shadow: 0 12px 40px #17203320; }
+    label { display: block; margin: 18px 0 8px; font-weight: 650; }
+    input, button { box-sizing: border-box; width: 100%; padding: 12px 14px; font: inherit; border-radius: 10px; border: 1px solid #b9c3d6; }
+    button { margin-top: 20px; border: 0; background: #315efb; color: white; cursor: pointer; }
+    #status { min-height: 28px; margin-top: 18px; color: #176b3a; font-weight: 650; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>人工录制产品链路 Smoke</h1>
+    <p>按录制指引填写字段并保存，用于验证正式 Electron capture runtime。</p>
+    <label for="name">项目名称</label>
+    <input id="name" placeholder="输入 Smoke 项目名称">
+    <label for="note">备注</label>
+    <input id="note" placeholder="输入补录备注">
+    <button id="save" type="button">保存</button>
+    <div id="status" role="status"></div>
+  </main>
+  <script>
+    document.querySelector('#save').addEventListener('click', () => {
+      const name = document.querySelector('#name').value.trim();
+      const note = document.querySelector('#note').value.trim();
+      document.querySelector('#status').textContent =
+        name ? `已保存：${name}${note ? `（${note}）` : ''}` : '请先填写项目名称';
+    });
+  </script>
+</body>
+</html>

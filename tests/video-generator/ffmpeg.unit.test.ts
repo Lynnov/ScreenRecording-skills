@@ -1,10 +1,10 @@
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { assertFfmpegAvailable, renderFinalVideo, type RenderFinalVideoInput } from '../../src/lib/video-generator/ffmpeg.js';
+import { assertFfmpegAvailable, renderFinalVideo, renderManualFinalVideo, type RenderFinalVideoInput } from '../../src/lib/video-generator/ffmpeg.js';
 import type { RunCommand } from '../../src/lib/video-generator/audio.js';
 import { VideoGeneratorError, type Timeline } from '../../src/lib/video-generator/types.js';
 
@@ -242,4 +242,31 @@ test('renderFinalVideo reports missing clip paths clearly', async () => {
       return true;
     },
   );
+});
+
+test('renderManualFinalVideo quotes a Windows subtitle filename inside filter_complex', async () => {
+  const outputDir = path.join(tmpdir(), `manual-final-filter-${process.pid}-${Date.now()}`);
+  await mkdir(outputDir, { recursive: true });
+  let filter = '';
+  try {
+    await renderManualFinalVideo({
+      plan: {
+        version: 1,
+        canvas: { width: 1920, height: 1080, fps: 30 },
+        segments: [{ segmentId: 'segment-001', title: 'Save', clips: [{ sourceId: 'source', sourceStartMs: 0, sourceEndMs: 1000, playbackRate: 1 }], confidence: 'high', reason: 'test' }],
+      },
+      sources: [{ id: 'source', path: 'E:\\clips\\source.mp4', durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264', pixelFormat: 'yuv420p', hasAudio: false }],
+      audioPath: 'E:\\audio\\narration.wav',
+      subtitlesPath: "E:\\subtitle dir\\scene one's.srt",
+      outputPath: path.join(outputDir, 'final.mp4'),
+      runCommand: async (_command, args) => {
+        filter = args[args.indexOf('-filter_complex') + 1] ?? '';
+        await writeFile(args.at(-1)!, 'video');
+        return { stdout: '', stderr: '' };
+      },
+    });
+    assert.match(filter, /subtitles='E\\:\/subtitle\\ dir\/scene\\ one\\'s\.srt'/);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
 });

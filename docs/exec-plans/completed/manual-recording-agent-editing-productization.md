@@ -1,11 +1,14 @@
-# 人工录制与 Agent 辅助剪辑产品化实施计划
+# 人工录制与 Agent 辅助剪辑产品化实施计划（已完成）
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > 创建时间：2026-07-28  
-> 最后更新：2026-07-28  
+> 最后更新：2026-07-29  
+> 完成时间：2026-07-29  
 > 设计基线：`docs/research/manual-recording-agent-editing-design.md`  
 > POC 基线：`ee849df docs: complete manual recording poc acceptance`
+
+> **完成状态：** Task 1-10 已全部实现并通过最终里程碑验证。Task 8 的真实 record/pickup smoke 报告为 `ok=true`、`cleanupErrors=[]`；最终回归包括 `npm run test`（413/413）、`npm run test:video-poc`、`npm run test:editing-poc`、`npm run build:manual`、`npm run build:manual-poc` 和 `npm run test:manual-product`。
 
 **Goal:** 在已通过的 Windows 窗口捕获、统一时钟、页面事件、虚拟鼠标和多源 preview POC 之上，交付可实际运行的“Markdown → Agent guide → 人工录制 → Agent 初剪 → 三栏审核/补录 → Agent 旁白 → TTS/字幕/final”完整产品流程。
 

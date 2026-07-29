@@ -126,6 +126,9 @@ async function padAudioSegment(input: {
 export async function mergeAudioSegments(input: MergeAudioSegmentsInput): Promise<string> {
   const runCommand = input.runCommand ?? defaultRunCommand;
   const concatListPath = path.join(path.dirname(input.outputPath), 'narration-concat-list.txt');
+  if (input.segments !== undefined && input.segments.length !== input.audioPaths.length) {
+    throw new VideoGeneratorError('FFMPEG_FAILED', 'Narration audio paths and final timeline segments must have the same length.');
+  }
 
   await mkdir(path.dirname(input.outputPath), { recursive: true });
 

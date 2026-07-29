@@ -172,3 +172,9 @@ TTS 通过 `src/lib/video-generator/tts/types.ts` 的 `TtsProvider` 接口隔离
 | 字幕 | SRT + ffmpeg burn-in |
 | 测试 | TypeScript typecheck、node:test、tsx、Playwright POC |
 | 输出格式 | 本地素材目录 + `final.mp4` |
+
+## Manual recording product flow
+
+人工模式位于 `src/lib/video-generator/manual/`，与自动模式并行。CLI 通过版本化 Agent exchange 串联 guide、capture、edit、review、pickup、narration 和 finalize；原始素材与 Agent response 不覆盖。`verify:manual` 对 guide/capture/preview/review/pickup/final 分阶段校验 schema、媒体、review gate 和上游不可变文件 hash。
+
+最终视频只允许使用 `edit-plan.effective.current.json` 与 approved narration。音频、字幕和视频共享 `final-timeline.json`；DashScope 缺失只阻止 finalize。

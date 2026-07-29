@@ -1,0 +1,12 @@
+:root { color-scheme: dark; font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif; background: #14110c; color: #f7efe1; }
+body { margin: 0; }
+.review-shell { min-height: 100vh; display: grid; grid-template-columns: 280px minmax(420px, 1fr) 340px; gap: 1px; background: #3c3324; }
+.pane { background: #17140f; padding: 18px; overflow: auto; }
+.segment-list { display: grid; align-content: start; gap: 10px; }
+.preview-pane { display: grid; grid-template-rows: 1fr auto; gap: 16px; }
+#segment-preview { width: 100%; border-radius: 16px; background: #000; box-shadow: 0 22px 80px rgba(0,0,0,.36); }
+#timeline-strip { min-height: 64px; border: 1px solid rgba(243, 204, 116, .32); border-radius: 12px; background: linear-gradient(90deg, rgba(243,204,116,.20), rgba(143,240,199,.16)); }
+.decision-pane { display: grid; align-content: start; gap: 14px; }
+label { display: grid; gap: 6px; color: #d7c7a1; }
+input, select, textarea, button { border-radius: 10px; border: 1px solid rgba(243,204,116,.36); background: #231d14; color: #fff8e6; padding: 9px 10px; }
+button { background: #f3cc74; color: #1d160b; font-weight: 800; }

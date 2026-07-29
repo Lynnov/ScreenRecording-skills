@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "noEmit": false,
+    "outDir": "dist/manual-recording",
+    "rootDir": ".",
+    "skipLibCheck": false
+  },
+  "include": [
+    "src/lib/video-generator/recording-overlay/**/*.ts",
+    "src/lib/video-generator/recording-overlay/**/*.mts",
+    "src/lib/video-generator/recording-overlay/**/*.cts",
+    "src/lib/video-generator/review-ui/**/*.ts",
+    "src/lib/video-generator/review-ui/**/*.cts",
+    "src/lib/video-generator/manual/**/*.ts",
+    "src/lib/video-generator/capture/**/*.ts",
+    "src/lib/video-generator/recording/**/*.ts",
+    "src/lib/video-generator/editing/**/*.ts",
+    "src/lib/video-generator/browser/manual-*.ts"
+  ]
+}
