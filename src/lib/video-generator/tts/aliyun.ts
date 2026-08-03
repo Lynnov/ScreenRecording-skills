@@ -152,7 +152,7 @@ function addOptionalNumber(input: CosyVoiceInput, key: string, value: string | u
 }
 
 function addOptionalBoolean(input: CosyVoiceInput, key: string, value: string | undefined): void {
-  if (value === undefined) {
+  if (!value) {
     return;
   }
 
@@ -165,7 +165,7 @@ function validateCosyVoiceEnv(env: NodeJS.ProcessEnv): void {
   validateOptionalNumber(env, 'ALIYUN_TTS_RATE', (value) => value >= 0.5 && value <= 2, 'between 0.5 and 2.0');
   validateOptionalNumber(env, 'ALIYUN_TTS_PITCH', (value) => value >= 0.5 && value <= 2, 'between 0.5 and 2.0');
 
-  if (env.ALIYUN_TTS_ENABLE_SSML !== undefined && env.ALIYUN_TTS_ENABLE_SSML !== 'true' && env.ALIYUN_TTS_ENABLE_SSML !== 'false') {
+  if (env.ALIYUN_TTS_ENABLE_SSML && env.ALIYUN_TTS_ENABLE_SSML !== 'true' && env.ALIYUN_TTS_ENABLE_SSML !== 'false') {
     throw new VideoGeneratorError(
       'MISSING_TTS_CONFIG',
       `Invalid Aliyun TTS environment variable ALIYUN_TTS_ENABLE_SSML: expected true or false, got ${env.ALIYUN_TTS_ENABLE_SSML}`,

@@ -12,7 +12,7 @@ test('review UI contains three-pane layout and review controls', async () => {
   const css = await readFile(path.resolve('src/lib/video-generator/review-ui/review.css'), 'utf8');
   const renderer = await readFile(path.resolve('src/lib/video-generator/review-ui/renderer.ts'), 'utf8');
 
-  for (const id of ['segment-list', 'preview-pane', 'decision-pane', 'agent-reason', 'boundary-start', 'boundary-end', 'source-select', 'wait-strategy']) {
+  for (const id of ['segment-list', 'preview-pane', 'decision-pane', 'agent-reason', 'boundary-start', 'boundary-end', 'source-select', 'wait-strategy', 'preview-error', 'save-status']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   for (const status of ['approved', 'pickup-required', 'rejected']) {
@@ -22,6 +22,17 @@ test('review UI contains three-pane layout and review controls', async () => {
   assert.match(css, /grid-template-columns/);
   assert.match(renderer, /reviewUi\.saveReview/);
   assert.match(renderer, /reviewUi\.loadBundle/);
+  assert.match(renderer, /await window\.reviewUi\.saveReview/);
+  assert.match(renderer, /saveButton\.disabled = true/);
+  assert.match(renderer, /保存中/);
+  assert.match(renderer, /已保存/);
+  assert.match(renderer, /保存失败/);
+  assert.match(html, /<title>人工录制审核<\/title>/);
+  assert.match(html, />已通过<\/option>/);
+  assert.match(html, />需要补录<\/option>/);
+  assert.match(html, />已拒绝<\/option>/);
+  assert.match(html, />保留<\/option>/);
+  assert.match(html, />压缩等待<\/option>/);
 });
 
 test('review UI preload exposes typed API only and main uses context isolation custom file guard', async () => {
@@ -110,6 +121,12 @@ test('review UI renderer edits the selected segment and exposes preview/local-pr
   assert.match(renderer, /segment-preview/);
   assert.match(renderer, /timeline-strip/);
   assert.match(renderer, /localPreview/);
+  assert.match(renderer, /getSegmentPlaybackRange/);
+  assert.match(renderer, /preview\.currentTime = range\.startSeconds/);
+  assert.match(renderer, /preview\.play\(\)/);
+  assert.match(renderer, /addEventListener\('timeupdate'/);
+  assert.match(renderer, /formatSegmentLabel/);
+  assert.match(renderer, /formatSourceLabel/);
   assert.match(preload, /localPreview/);
   assert.match(main, /saveReviewedEffectivePlan/);
   assert.match(main, /REVIEW_UI_CHANNELS\.localPreview/);
