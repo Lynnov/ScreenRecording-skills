@@ -31,11 +31,30 @@ test('review UI preload exposes typed API only and main uses context isolation c
 
   assert.match(preload, /contextBridge\.exposeInMainWorld\('reviewUi'/);
   assert.doesNotMatch(preload, /node:fs|child_process/);
+  assert.doesNotMatch(preload, /require\(['"]\.\/ipc\.js['"]\)/);
+  assert.match(preload, /const channels =/);
   assert.match(main, /contextIsolation:\s*true/);
   assert.match(main, /nodeIntegration:\s*false/);
   assert.match(main, /assertPathInsideRun/);
   assert.match(ipc, /review-ui:load-bundle/);
   assert.match(ipc, /review-ui:save-review/);
+});
+
+test('review UI resolves worktree-relative artifact pointers against an absolute run directory', async () => {
+  const main = await readFile(path.resolve('src/lib/video-generator/review-ui/main.ts'), 'utf8');
+
+  assert.match(main, /resolvePathInsideRun/);
+  assert.match(main, /const reviewPath = assertPathInsideRun\(pointer\.path, rootDir\)/);
+  assert.match(main, /readFile\(reviewPath, 'utf8'\)/);
+  assert.match(main, /const agentPlanPath = assertPathInsideRun\(pointer\.path, rootDir\)/);
+  assert.match(main, /readFile\(agentPlanPath, 'utf8'\)/);
+});
+
+test('review UI exposes the local preview as a browser-safe file URL', async () => {
+  const main = await readFile(path.resolve('src/lib/video-generator/review-ui/main.ts'), 'utf8');
+
+  assert.match(main, /pathToFileURL/);
+  assert.match(main, /previewPath: pathToFileURL\(previewVideoPath\)\.href/);
 });
 
 test('manual build includes review UI assets and package script exposes video:review', async () => {
