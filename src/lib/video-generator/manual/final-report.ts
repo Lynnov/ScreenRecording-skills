@@ -72,7 +72,8 @@ async function loadFinalInputs(runDir: string): Promise<{
     throw new Error('Approved narration pointer is invalid.');
   }
   const narrationPath = resolvePathInsideRun(runDir, approved.narrationPath, 'Approved narration');
-  if (narrationPath !== bundle.versionedScriptPath('narration-final', approved.narrationVersion)) {
+  const expectedNarrationPath = path.resolve(bundle.versionedScriptPath('narration-final', approved.narrationVersion));
+  if (path.resolve(narrationPath) !== expectedNarrationPath) {
     throw new Error('Approved narration pointer version and path do not match.');
   }
   const narration = parseNarrationMarkdown(await readFile(narrationPath, 'utf8'));

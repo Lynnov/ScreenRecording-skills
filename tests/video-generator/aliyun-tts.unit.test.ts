@@ -58,7 +58,7 @@ test('createAliyunTtsProvider synthesizes CosyVoice speech, downloads audio, wri
   };
 
   try {
-    const provider = createAliyunTtsProvider(validEnv, {
+    const provider = createAliyunTtsProvider({ ...validEnv, ALIYUN_TTS_ENABLE_SSML: '' }, {
       fetch: fakeFetch,
       getAudioDurationMs: async (audioPath) => {
         assert.equal(audioPath, outputPath);

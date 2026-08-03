@@ -4,8 +4,8 @@ import path from 'node:path';
 
 import { createManualBundle } from '../../src/lib/video-generator/manual/bundle.js';
 
-export async function createReadyRun(): Promise<string> {
-  const runDir = await mkdtemp(path.join(tmpdir(), 'manual-finalize-'));
+export async function createReadyRun(parentDir = tmpdir()): Promise<string> {
+  const runDir = await mkdtemp(path.join(parentDir, 'manual-finalize-'));
   const bundle = createManualBundle(runDir);
   await Promise.all([mkdir(bundle.scriptsDir, { recursive: true }), mkdir(bundle.editDir, { recursive: true }), mkdir(bundle.captureDir, { recursive: true })]);
   const guidePath = bundle.versionedScriptPath('recording-guide', 1);

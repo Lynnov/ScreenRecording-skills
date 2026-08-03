@@ -2,6 +2,12 @@
 
 import type { EditReview, EditReviewSegment } from '../manual/review.js';
 import type { ReviewUiBundle } from './ipc.js';
+import {
+  formatSegmentLabel,
+  formatSourceLabel,
+  getSegmentPlaybackRange,
+  type SegmentPlaybackRange,
+} from './review-presenter.js';
 
 declare global {
   interface Window {
@@ -16,6 +22,7 @@ declare global {
 const segmentList = document.querySelector<HTMLElement>('#segment-list');
 const agentReason = document.querySelector<HTMLElement>('#agent-reason');
 const saveButton = document.querySelector<HTMLButtonElement>('#save-review');
+const saveStatus = document.querySelector<HTMLElement>('#save-status');
 const statusSelect = document.querySelector<HTMLSelectElement>('#review-status');
 const reasons = document.querySelector<HTMLTextAreaElement>('#review-reasons');
 const boundaryStart = document.querySelector<HTMLInputElement>('#boundary-start');
@@ -24,28 +31,44 @@ const sourceSelect = document.querySelector<HTMLSelectElement>('#source-select')
 const waitStrategy = document.querySelector<HTMLSelectElement>('#wait-strategy');
 const preview = document.querySelector<HTMLVideoElement>('#segment-preview');
 const timelineStrip = document.querySelector<HTMLElement>('#timeline-strip');
+const previewError = document.querySelector<HTMLElement>('#preview-error');
 
 let currentReview: EditReview | null = null;
 let currentBundle: ReviewUiBundle | null = null;
 let selectedSegmentId: string | null = null;
+let selectedPlaybackRange: SegmentPlaybackRange | null = null;
+let previewRenderVersion = 0;
 
 void window.reviewUi.loadBundle().then((bundle) => {
   currentBundle = bundle;
   currentReview = bundle.reviewDraft;
   selectedSegmentId = bundle.reviewDraft.segments[0]?.segmentId ?? null;
-  renderReview(bundle.reviewDraft);
-  renderPreview(bundle.reviewDraft.segments[0] ?? null);
+  renderReview(bundle.reviewDraft, false);
   renderTimelineBundle(bundle.previewTimeline);
 });
 
 saveButton?.addEventListener('click', () => {
+  void saveCurrentReview();
+});
+
+async function saveCurrentReview(): Promise<void> {
   if (currentReview === null) return;
   const segment = getSelectedSegment(currentReview);
-  if (segment !== null) {
-    updateDraftFromForm(segment);
-    void window.reviewUi.saveReview(currentReview);
+  if (segment === null || saveButton === null) return;
+  updateDraftFromForm(segment);
+  saveButton.disabled = true;
+  saveButton.textContent = '保存中…';
+  showSaveStatus('保存中…', 'pending');
+  try {
+    await window.reviewUi.saveReview(currentReview);
+    showSaveStatus('已保存', 'success');
+  } catch (error) {
+    showSaveStatus(`保存失败：${error instanceof Error ? error.message : String(error)}`, 'error');
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = '保存审核';
   }
-});
+}
 
 segmentList?.addEventListener('click', (event) => {
   const target = event.target;
@@ -58,8 +81,16 @@ segmentList?.addEventListener('click', (event) => {
   }
   selectedSegmentId = segmentId;
   if (currentReview !== null) {
-    renderReview(currentReview);
+    renderReview(currentReview, true);
   }
+});
+
+preview?.addEventListener('timeupdate', () => {
+  const range = selectedPlaybackRange;
+  if (range === null || preview.currentTime < range.endSeconds - 0.03) return;
+  const wasPlaying = !preview.paused;
+  preview.currentTime = range.startSeconds;
+  if (wasPlaying) void playSelectedPreview();
 });
 
 timelineStrip?.addEventListener('dblclick', () => {
@@ -87,14 +118,14 @@ function updateDraftFromForm(segment: EditReviewSegment): void {
   segment.reviewReasons = reasons?.value.split(/\r?\n/).filter(Boolean) ?? segment.reviewReasons;
 }
 
-function renderReview(review: EditReview): void {
+function renderReview(review: EditReview, autoplay: boolean): void {
   if (segmentList !== null) {
-    segmentList.replaceChildren(...review.segments.map((segment) => {
+    segmentList.replaceChildren(...review.segments.map((segment, index) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.segment = segment.segmentId;
       button.setAttribute('aria-pressed', String(segment.segmentId === selectedSegmentId));
-      button.textContent = `${segment.segmentId} · ${segment.status}`;
+      button.textContent = formatSegmentLabel(segment.segmentId, segment.status, index);
       return button;
     }));
   }
@@ -105,34 +136,77 @@ function renderReview(review: EditReview): void {
   if (boundaryStart !== null) boundaryStart.value = String(segment?.adjustedStartMs ?? '');
   if (boundaryEnd !== null) boundaryEnd.value = String(segment?.adjustedEndMs ?? '');
   if (waitStrategy !== null) waitStrategy.value = segment?.waitStrategy ?? 'keep';
-  renderSources(review, segment?.selectedSourceId ?? null);
-  renderPreview(segment);
+  renderSources(segment?.selectedSourceId ?? null);
+  renderPreview(segment, autoplay);
   renderTimeline(review, segment);
 }
 
-function renderSources(review: EditReview, selectedSourceId: string | null): void {
+function renderSources(selectedSourceId: string | null): void {
   if (sourceSelect === null || currentBundle === null) return;
-  const options = ((currentBundle.sourceCatalog as { sources?: Array<{ id: string; status?: string }> }).sources ?? []).map((source) => {
-    const option = new Option(`${source.id} · ${source.status ?? 'available'}`, source.id);
+  const options = ((currentBundle.sourceCatalog as { sources?: Array<{ id: string; kind?: string; status?: string; attempt?: number | null }> }).sources ?? []).map((source) => {
+    const option = new Option(formatSourceLabel(source), source.id);
     option.selected = source.id === selectedSourceId;
     return option;
   });
   sourceSelect.replaceChildren(...options);
 }
 
-function renderPreview(segment: EditReviewSegment | null): void {
-  if (preview === null || currentBundle === null) return;
-  preview.src = currentBundle.previewPath;
-  preview.loop = true;
+function renderPreview(segment: EditReviewSegment | null, autoplay: boolean): void {
+  if (preview === null || currentBundle === null || segment === null) return;
+  const renderVersion = ++previewRenderVersion;
+  preview.loop = false;
+  if (preview.getAttribute('src') !== currentBundle.previewPath) {
+    preview.src = currentBundle.previewPath;
+  }
   if (segment?.adjustedStartMs !== undefined && segment.adjustedEndMs !== undefined) {
     preview.dataset.segmentStart = String(segment.adjustedStartMs);
     preview.dataset.segmentEnd = String(segment.adjustedEndMs);
   }
+  try {
+    const range = getSegmentPlaybackRange(currentBundle.previewTimeline, segment.segmentId);
+    selectedPlaybackRange = range;
+    showPreviewError(null);
+    const seek = (): void => {
+      if (renderVersion !== previewRenderVersion || selectedPlaybackRange !== range) return;
+      preview.currentTime = range.startSeconds;
+      if (autoplay) void playSelectedPreview();
+    };
+    if (preview.readyState >= 1) seek();
+    else preview.addEventListener('loadedmetadata', seek, { once: true });
+  } catch (error) {
+    selectedPlaybackRange = null;
+    preview.pause();
+    showPreviewError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function playSelectedPreview(): Promise<void> {
+  if (preview === null) return;
+  try {
+    await preview.play();
+    showPreviewError(null);
+  } catch (error) {
+    showPreviewError(`无法播放所选片段：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function showPreviewError(message: string | null): void {
+  if (previewError === null) return;
+  previewError.hidden = message === null;
+  previewError.textContent = message ?? '';
+}
+
+function showSaveStatus(message: string, state: 'pending' | 'success' | 'error'): void {
+  if (saveStatus === null) return;
+  saveStatus.textContent = message;
+  saveStatus.dataset.state = state;
 }
 
 function renderTimeline(review: EditReview, segment: EditReviewSegment | null): void {
   if (timelineStrip === null) return;
-  timelineStrip.textContent = review.segments.map((item) => `${item.segmentId}:${item.status}`).join(' | ');
+  timelineStrip.textContent = review.segments
+    .map((item, index) => formatSegmentLabel(item.segmentId, item.status, index))
+    .join(' | ');
   if (segment !== null) {
     timelineStrip.dataset.selectedSegment = segment.segmentId;
   }

@@ -37,7 +37,7 @@ export function createEditReviewDraft(input: { agentPlan: EditPlan; createdAt?: 
       segmentId: segment.segmentId,
       status: segment.confidence === 'low' ? 'pickup-required' : 'approved',
       waitStrategy: 'keep',
-      reviewReasons: segment.confidence === 'low' ? ['low confidence / 低置信度，需要人工处理。'] : [],
+      reviewReasons: segment.confidence === 'low' ? ['低置信度，需要人工处理。'] : [],
     })),
   };
 }

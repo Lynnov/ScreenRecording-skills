@@ -68,3 +68,122 @@ test('review verifier requires reviewComplete and valid current pointers', async
   assert.equal(report.ok, false);
   assert.match(report.errors.join('\n'), /reviewComplete/);
 });
+
+test('pickup verifier accepts pickup-owned capture updates and ignores failed upstream reports', async () => {
+  const runDir = await createGuideRun();
+  const bundle = createManualBundle(runDir);
+  await Promise.all([
+    mkdir(bundle.captureDir, { recursive: true }),
+    mkdir(bundle.pickupsDir, { recursive: true }),
+    mkdir(bundle.editDir, { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(bundle.originalVideoPath, 'original-video'),
+    writeFile(bundle.eventsPath, ''),
+    writeFile(bundle.tabsPath, '[]'),
+    writeFile(bundle.recordingManifestPath, JSON.stringify({
+      version: 1,
+      captureComplete: true,
+      clockStatus: 'ok',
+      video: { status: 'available', path: bundle.originalVideoPath },
+    })),
+    writeFile(bundle.sourceCatalogPath, JSON.stringify({
+      version: 1,
+      sources: [{
+        id: 'original', path: bundle.originalVideoPath, kind: 'original', segmentId: null, attempt: null,
+        status: 'available', createdAt: '2026-07-29T00:00:00.000Z', durationMs: 1000,
+        width: 1920, height: 1080, fps: 30, codecName: 'h264', pixelFormat: 'yuv420p', hasAudio: false,
+      }],
+    })),
+    writeFile(bundle.previewVideoPath, 'preview-before-pickup'),
+    writeFile(bundle.previewTimelinePath, JSON.stringify({ version: 1, durationMs: 1000, segments: [] })),
+  ]);
+  await verifyManualStage({ runDir, stage: 'guide' });
+  const capture = await verifyManualStage({
+    runDir,
+    stage: 'capture',
+    probeMedia: async () => ({ durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' }),
+  });
+  assert.equal(capture.ok, true);
+  const preview = await verifyManualStage({
+    runDir,
+    stage: 'preview',
+    probeMedia: async () => ({ durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' }),
+  });
+  assert.equal(preview.ok, true);
+
+  const pickupPath = bundle.pickupPath('segment-001', 1);
+  await Promise.all([
+    writeFile(pickupPath, 'pickup-video'),
+    writeFile(bundle.previewVideoPath, 'preview-after-pickup'),
+    writeFile(bundle.previewTimelinePath, JSON.stringify({ version: 1, durationMs: 1800, segments: [] })),
+    writeFile(bundle.recordingManifestPath, JSON.stringify({
+      version: 1,
+      captureComplete: true,
+      clockStatus: 'ok',
+      video: { status: 'available', path: bundle.originalVideoPath },
+      pickupAttempts: [{ segmentId: 'segment-001', status: 'confirmed' }],
+    })),
+    writeFile(bundle.sourceCatalogPath, JSON.stringify({
+      version: 1,
+      sources: [
+        {
+          id: 'original', path: bundle.originalVideoPath, kind: 'original', segmentId: null, attempt: null,
+          status: 'available', createdAt: '2026-07-29T00:00:00.000Z', durationMs: 1000,
+          width: 1920, height: 1080, fps: 30, codecName: 'h264', pixelFormat: 'yuv420p', hasAudio: false,
+        },
+        {
+          id: 'segment-001-attempt-001', path: pickupPath, kind: 'pickup', segmentId: 'segment-001', attempt: 1,
+          status: 'available', createdAt: '2026-07-29T00:01:00.000Z', durationMs: 800,
+          width: 1920, height: 1080, fps: 30, codecName: 'h264', pixelFormat: 'yuv420p', hasAudio: false,
+        },
+      ],
+    })),
+    writeFile(bundle.reportPath('review-verification'), JSON.stringify({
+      version: 1,
+      stage: 'review',
+      ok: false,
+      checkedAt: '2026-07-29T00:02:00.000Z',
+      hashes: { [bundle.originalScriptPath]: 'failed-report-must-not-be-a-baseline' },
+      media: {},
+      errors: ['review incomplete'],
+    })),
+  ]);
+
+  const pickup = await verifyManualStage({ runDir, stage: 'pickup' });
+  assert.equal(pickup.ok, true, pickup.errors.join('\n'));
+  assert.ok(bundle.recordingManifestPath in pickup.hashes);
+  assert.ok(bundle.sourceCatalogPath in pickup.hashes);
+  assert.ok(bundle.previewVideoPath in pickup.hashes);
+  assert.ok(bundle.previewTimelinePath in pickup.hashes);
+});
+
+test('final stage verifier preserves the finalize report and writes a separate stage report', async () => {
+  const runDir = await createGuideRun();
+  const bundle = createManualBundle(runDir);
+  await Promise.all([
+    mkdir(bundle.editDir, { recursive: true }),
+    writeFile(bundle.finalTimelinePath, JSON.stringify({ version: 1, durationMs: 1000, segments: [] })),
+    writeFile(bundle.subtitlesPath, '1\n00:00:00,000 --> 00:00:01,000\n完成\n'),
+    writeFile(bundle.finalVideoPath, 'final-video'),
+    writeFile(bundle.reportPath('final-verification'), JSON.stringify({
+      version: 1,
+      ok: true,
+      runDir,
+      finalVideoPath: bundle.finalVideoPath,
+      probe: { durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' },
+    })),
+  ]);
+
+  const report = await verifyManualStage({
+    runDir,
+    stage: 'final',
+    probeMedia: async () => ({ durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' }),
+  });
+  assert.equal(report.ok, true, report.errors.join('\n'));
+  const finalizeReport = JSON.parse(await readFile(bundle.reportPath('final-verification'), 'utf8')) as { ok: boolean; stage?: string };
+  assert.equal(finalizeReport.ok, true);
+  assert.equal(finalizeReport.stage, undefined);
+  const stageReport = JSON.parse(await readFile(bundle.reportPath('final-stage-verification'), 'utf8')) as { stage: string; ok: boolean };
+  assert.deepEqual({ stage: stageReport.stage, ok: stageReport.ok }, { stage: 'final', ok: true });
+});

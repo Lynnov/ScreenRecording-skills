@@ -54,7 +54,7 @@ test('createEditReviewDraft creates one pending review item per agent segment', 
   assert.equal(draft.reviewComplete, false);
   assert.deepEqual(draft.segments.map((segment) => segment.segmentId), ['segment-001', 'segment-002']);
   assert.deepEqual(draft.segments.map((segment) => segment.status), ['approved', 'pickup-required']);
-  assert.match(draft.segments[1]!.reviewReasons.join('\n'), /low confidence|低置信度/i);
+  assert.deepEqual(draft.segments[1]!.reviewReasons, ['低置信度，需要人工处理。']);
 });
 
 test('validateEditReview accepts approved pickup-required rejected and rejects invalid boundaries or missing low-confidence handling', () => {

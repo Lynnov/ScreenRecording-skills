@@ -23,6 +23,11 @@ export interface ManualStageVerificationReport {
   errors: string[];
 }
 
+function stageVerificationReportPath(runDir: string, stage: ManualVerifyStage): string {
+  const reportName = stage === 'final' ? 'final-stage-verification' : `${stage}-verification`;
+  return createManualBundle(runDir).reportPath(reportName);
+}
+
 type ProbeMedia = (filePath: string) => Promise<ProbedFinalVideo>;
 
 async function readJson<T>(filePath: string): Promise<T> {
@@ -101,6 +106,7 @@ async function collectPickup(runDir: string, files: string[]): Promise<void> {
   const catalog = await readJson<ManualSourceCatalog>(bundle.sourceCatalogPath);
   validateManualSourceCatalog(catalog);
   if (!catalog.sources.some((source) => source.kind === 'pickup')) throw new Error('pickup stage requires at least one pickup source.');
+  addUnique(files, bundle.recordingManifestPath);
   addUnique(files, bundle.sourceCatalogPath);
 }
 
@@ -122,17 +128,32 @@ async function collectFinal(
 async function compareUpstreamHashes(runDir: string, stage: ManualVerifyStage, hashes: Record<string, string>, errors: string[]): Promise<void> {
   const bundle = createManualBundle(runDir);
   const stageIndex = MANUAL_VERIFY_STAGES.indexOf(stage);
+  const expectedHashes = new Map<string, string>();
   for (const upstream of MANUAL_VERIFY_STAGES.slice(0, stageIndex)) {
     try {
       const previous = await readJson<ManualStageVerificationReport>(bundle.reportPath(`${upstream}-verification`));
+      if (previous.ok !== true) continue;
       for (const [filePath, expectedHash] of Object.entries(previous.hashes)) {
-        const currentHash = hashes[filePath] ?? await hashFile(filePath);
-        hashes[filePath] = currentHash;
-        if (currentHash !== expectedHash) errors.push(`Immutable upstream artifact hash changed: ${filePath}`);
+        expectedHashes.set(filePath, expectedHash);
       }
     } catch (error) {
       const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code: unknown }).code) : '';
       if (code !== 'ENOENT') errors.push(`Unable to verify upstream ${upstream} report: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const pickupOwnedFiles = stage === 'pickup'
+    ? new Set([
+      bundle.recordingManifestPath,
+      bundle.sourceCatalogPath,
+      bundle.previewTimelinePath,
+      bundle.previewVideoPath,
+    ])
+    : new Set<string>();
+  for (const [filePath, expectedHash] of expectedHashes) {
+    const currentHash = hashes[filePath] ?? await hashFile(filePath);
+    hashes[filePath] = currentHash;
+    if (!pickupOwnedFiles.has(filePath) && currentHash !== expectedHash) {
+      errors.push(`Immutable upstream artifact hash changed: ${filePath}`);
     }
   }
 }
@@ -179,7 +200,7 @@ export async function verifyManualStage(input: {
     media,
     errors,
   };
-  await writeAtomicJson(bundle.reportPath(`${input.stage}-verification`), report);
+  await writeAtomicJson(stageVerificationReportPath(input.runDir, input.stage), report);
   return report;
 }
 
@@ -201,7 +222,7 @@ export async function runManualVerifierCli(
   }
   if (runDir === undefined || stage === undefined) { stderr('Usage: verify:manual -- --run <run> --stage <guide|capture|preview|review|pickup|final>'); return 1; }
   const report = await verifyManualStage({ runDir, stage });
-  stdout(`${stage} verification: ${report.ok ? 'OK' : 'FAILED'}\nReport: ${createManualBundle(runDir).reportPath(`${stage}-verification`)}`);
+  stdout(`${stage} verification: ${report.ok ? 'OK' : 'FAILED'}\nReport: ${stageVerificationReportPath(runDir, stage)}`);
   if (!report.ok) stderr(report.errors.join('\n'));
   return report.ok ? 0 : 1;
 }
