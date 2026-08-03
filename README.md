@@ -199,3 +199,18 @@ video-runs/                             默认输出目录
 ```
 
 架构细节见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+## 人工录制与自动精剪
+
+项目也支持真实 Windows 交互式人工录制：录制、预览审核、pickup 补录、Agent 旁白、真实 TTS 和 ffmpeg finalize 可在同一个 `video-runs/<run>/` 中追踪。
+
+人工审核后的 effective plan 不会被覆盖。真实 TTS 后会生成独立 fine plan，按以下优先级清洗素材：
+
+1. 坏帧或不可解码区间；
+2. 高置信度白屏、无意义加载；
+3. 重复输入和误操作等待；
+4. TTS 对齐与最终节奏调整。
+
+页面 `navigation` 事件不能保护整段白屏；如果白屏候选包含真实点击、输入或保存，则保留并输出 warning。最终报告允许 `ok=true + quality.status=warning`，但必须保证媒体可播放、必需事件覆盖率 100% 和 `cleanupErrors=[]`。
+
+详细设计见 [人工录制平衡精剪设计](docs/research/manual-recording-balanced-fine-editing-design.md)。

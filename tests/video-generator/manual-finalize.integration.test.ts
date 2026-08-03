@@ -32,7 +32,14 @@ test('finalize with injected TTS render and probe creates shared timeline audio 
     },
   });
   assert.equal(report.ok, true);
+  assert.equal(report.renderOk, true);
+  assert.deepEqual(report.cleanupErrors, []);
+  assert.ok(report.quality?.status === 'passed' || report.quality?.status === 'warning');
   await access(bundle.finalVideoPath);
+  await access(bundle.fineEditRulesSnapshotPath);
+  await access(bundle.fineEditCurrentPlanPath);
+  await access(bundle.fineEditQualityPath);
+  await access(bundle.fineEditLearningCandidatePath);
   const timeline = JSON.parse(await readFile(bundle.finalTimelinePath, 'utf8')) as { segments: Array<{ subtitleEndMs: number }> };
   assert.equal(timeline.segments[0]?.subtitleEndMs, 1000);
   assert.match(await readFile(bundle.subtitlesPath, 'utf8'), /Save settings/);
@@ -65,6 +72,9 @@ test('finalize accepts a run directory relative to the current workspace', async
       },
     });
     assert.equal(report.ok, true, report.errorMessage);
+    assert.equal(report.renderOk, true);
+    assert.deepEqual(report.cleanupErrors, []);
+    assert.ok(report.quality?.status === 'passed' || report.quality?.status === 'warning');
   } finally {
     await rm(absoluteRunDir, { recursive: true, force: true });
   }

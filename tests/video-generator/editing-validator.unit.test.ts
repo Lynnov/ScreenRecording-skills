@@ -94,6 +94,51 @@ test('rejects playback rates outside 1 through 2 and invalid holds', () => {
   }
 });
 
+test('allows 5x only for proven 1 to 3 second mistake waits', () => {
+  const accepted = validPlan();
+  accepted.segments[0]!.transition = 'cut';
+  accepted.segments[0]!.clips[0] = {
+    sourceId: 'original',
+    sourceStartMs: 0,
+    sourceEndMs: 1500,
+    playbackRate: 5,
+    clipKind: 'mistake-wait',
+    evidenceEventIds: ['event-1'],
+    reason: 'discarded input attempt wait',
+  };
+  validateEditPlan(accepted, sources);
+
+  for (const clip of [
+    { ...accepted.segments[0]!.clips[0]!, clipKind: 'idle' as const },
+    { ...accepted.segments[0]!.clips[0]!, clipKind: 'action' as const },
+    { ...accepted.segments[0]!.clips[0]!, sourceEndMs: 1000 },
+  ]) {
+    const rejected = validPlan();
+    rejected.segments[0]!.transition = 'cut';
+    rejected.segments[0]!.clips[0] = clip;
+    assert.throws(() => validateEditPlan(rejected, sources), /clips\[0\].*(playbackRate|sourceEndMs|clipKind)/);
+  }
+});
+
+test('rejects unknown clip kinds and limits normal idle to 2x', () => {
+  const idle = validPlan();
+  idle.segments[0]!.clips[0] = {
+    ...idle.segments[0]!.clips[0]!,
+    playbackRate: 2,
+    clipKind: 'idle',
+    reason: 'page response wait',
+  };
+  validateEditPlan(idle, sources);
+
+  const fastIdle = validPlan();
+  fastIdle.segments[0]!.clips[0] = { ...idle.segments[0]!.clips[0]!, playbackRate: 2.01 };
+  assert.throws(() => validateEditPlan(fastIdle, sources), /playbackRate/);
+
+  const unknown = validPlan() as unknown as { segments: Array<{ clips: Array<Record<string, unknown>> }> };
+  unknown.segments[0]!.clips[0]!.clipKind = 'warp';
+  assert.throws(() => validateEditPlan(unknown, sources), /clipKind/);
+});
+
 test('rejects invalid short-fade placement and segments no longer than 120ms', () => {
   rejects(/segments\[1\]\.transition/, (plan) => {
     plan.segments[1]!.transition = 'short-fade';

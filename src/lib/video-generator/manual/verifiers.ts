@@ -118,9 +118,42 @@ async function collectFinal(
 ): Promise<void> {
   const bundle = createManualBundle(runDir);
   const finalReportPath = bundle.reportPath('final-verification');
-  const finalReport = await readJson<{ ok?: boolean }>(finalReportPath);
+  const finalReport = await readJson<{
+    ok?: boolean;
+    renderOk?: boolean;
+    fineEditRulesSnapshotPath?: string;
+    fineEditPlanPath?: string;
+    fineEditQualityPath?: string;
+    quality?: { status?: string };
+  }>(finalReportPath);
   if (finalReport.ok !== true) throw new Error('final-verification report must have ok=true.');
-  for (const filePath of [bundle.finalTimelinePath, bundle.subtitlesPath, bundle.finalVideoPath, finalReportPath]) addUnique(files, filePath);
+  if (finalReport.renderOk !== true) throw new Error('final-verification report must have renderOk=true.');
+  if (finalReport.quality?.status !== 'passed' && finalReport.quality?.status !== 'warning') {
+    throw new Error('final-verification report must include passed or warning fine-edit quality evidence.');
+  }
+  const fineEditRulesPath = typeof finalReport.fineEditRulesSnapshotPath === 'string'
+    ? resolvePathInsideRun(runDir, finalReport.fineEditRulesSnapshotPath, 'Fine-edit rules snapshot')
+    : undefined;
+  const fineEditPlanPath = typeof finalReport.fineEditPlanPath === 'string'
+    ? resolvePathInsideRun(runDir, finalReport.fineEditPlanPath, 'Fine-edit plan')
+    : undefined;
+  const fineEditQualityPath = typeof finalReport.fineEditQualityPath === 'string'
+    ? resolvePathInsideRun(runDir, finalReport.fineEditQualityPath, 'Fine-edit quality report')
+    : undefined;
+  if (fineEditRulesPath === undefined || fineEditPlanPath === undefined || fineEditQualityPath === undefined) {
+    throw new Error('final-verification report must reference fine-edit rules, plan, and quality artifacts.');
+  }
+  const quality = await readJson<{ status?: string }>(fineEditQualityPath);
+  if (quality.status !== finalReport.quality.status) throw new Error('Fine-edit quality artifact and final report status do not match.');
+  for (const filePath of [
+    bundle.finalTimelinePath,
+    bundle.subtitlesPath,
+    bundle.finalVideoPath,
+    finalReportPath,
+    fineEditRulesPath,
+    fineEditPlanPath,
+    fineEditQualityPath,
+  ]) addUnique(files, filePath);
   await readJson<unknown>(bundle.finalTimelinePath);
   media[bundle.finalVideoPath] = await probe(bundle.finalVideoPath);
 }

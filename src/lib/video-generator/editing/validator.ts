@@ -78,7 +78,36 @@ function validateClip(
   if (sourceEndMs > source.durationMs) {
     fail(`${path}.sourceEndMs`, `exceeds source "${sourceId}" duration ${source.durationMs}ms`);
   }
-  if (playbackRate < 1 || playbackRate > 2) {
+  const clipKind = clip.clipKind;
+  if (
+    clipKind !== undefined
+    && clipKind !== 'context'
+    && clipKind !== 'action'
+    && clipKind !== 'result'
+    && clipKind !== 'idle'
+    && clipKind !== 'mistake-wait'
+  ) {
+    fail(`${path}.clipKind`, 'is invalid');
+  }
+  if (clip.evidenceEventIds !== undefined) {
+    if (!Array.isArray(clip.evidenceEventIds) || !clip.evidenceEventIds.every((id) => typeof id === 'string' && id.length > 0)) {
+      fail(`${path}.evidenceEventIds`, 'must be an array of non-empty strings');
+    }
+  }
+  if (clip.reason !== undefined && (typeof clip.reason !== 'string' || clip.reason.length === 0)) {
+    fail(`${path}.reason`, 'must be a non-empty string');
+  }
+  if (clipKind === 'mistake-wait') {
+    const durationMs = sourceEndMs - sourceStartMs;
+    if (playbackRate !== 5) fail(`${path}.playbackRate`, 'must equal 5 for mistake-wait');
+    if (durationMs <= 1000 || durationMs > 3000) fail(`${path}.sourceEndMs`, 'mistake-wait duration must be greater than 1000ms and at most 3000ms');
+    if (!Array.isArray(clip.evidenceEventIds) || clip.evidenceEventIds.length === 0) fail(`${path}.clipKind`, 'mistake-wait requires evidenceEventIds');
+    if (typeof clip.reason !== 'string' || clip.reason.length === 0) fail(`${path}.clipKind`, 'mistake-wait requires reason');
+  } else if (clipKind === 'idle') {
+    if (playbackRate < 1 || playbackRate > 2) fail(`${path}.playbackRate`, 'must be between 1 and 2 for idle');
+  } else if (clipKind === 'context' || clipKind === 'action' || clipKind === 'result') {
+    if (playbackRate !== 1) fail(`${path}.playbackRate`, `must equal 1 for ${clipKind}`);
+  } else if (playbackRate < 1 || playbackRate > 2) {
     fail(`${path}.playbackRate`, 'must be between 1 and 2');
   }
   return clip as unknown as EditClip;

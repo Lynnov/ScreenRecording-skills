@@ -101,3 +101,12 @@
 - 分阶段验证：`npm run verify:manual -- --run <run> --stage <guide|capture|preview|review|pickup|final>`
 - 无人值守 E2E 使用 stub Agent、注入式 capture/TTS 和真实 ffmpeg；不得冒充人工桌面 record/pickup 验收。
 - 真实桌面录制仍需在交互式 Windows 会话中单独执行。
+
+## 人工录制精剪与媒体清洗规则
+
+- `edit-plan.effective.current.json` 是人工审核后的内容边界；真实 TTS 生成后再生成独立的 `edit-plan.fine.vNN.json`，不得覆盖 effective plan。
+- 媒体清洗优先级：坏帧/不可解码区间 > 高置信度白屏和无意义加载 > 页面生命周期 `navigation` > 普通节奏优化。
+- 高置信度白屏优先删除；如果候选区间包含真实点击、输入或保存，则保留操作并输出 `AMBIGUOUS_BLANK_REGION` warning，不能静默删除。
+- 重复输入只保留同一输入目标的最后一次有效尝试；普通等待最多 2 倍速，经过证据确认的 1～3 秒误操作等待才允许 5 倍速。
+- final 可以 `ok=true + quality.status=warning`，但必须满足必需事件覆盖率 100%、`cleanupErrors=[]`、媒体可播放且 final-stage verifier 通过。
+- 当前媒体清洗已在 finalize 精剪阶段生效；后续应复用到 Agent 粗剪/preview 阶段，让人工审核先看到清洗后的素材。

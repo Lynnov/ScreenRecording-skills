@@ -178,3 +178,19 @@ TTS 通过 `src/lib/video-generator/tts/types.ts` 的 `TtsProvider` 接口隔离
 人工模式位于 `src/lib/video-generator/manual/`，与自动模式并行。CLI 通过版本化 Agent exchange 串联 guide、capture、edit、review、pickup、narration 和 finalize；原始素材与 Agent response 不覆盖。`verify:manual` 对 guide/capture/preview/review/pickup/final 分阶段校验 schema、媒体、review gate 和上游不可变文件 hash。
 
 最终视频只允许使用 `edit-plan.effective.current.json` 与 approved narration。音频、字幕和视频共享 `final-timeline.json`；DashScope 缺失只阻止 finalize。
+
+## 人工录制剪辑数据流
+
+```text
+approved effective plan
+  → media hygiene（坏帧、白屏、无意义加载候选）
+  → source event analysis（重复输入、操作窗口、navigation 上下文）
+  → real TTS durations
+  → fine edit plan
+  → quality report + final timeline
+  → ffmpeg/ffprobe final.mp4
+```
+
+媒体清洗与语义精剪分层：高置信度白屏优先于 `navigation` 事件；但候选区间若包含真实点击、输入或保存，则保留并报告 `AMBIGUOUS_BLANK_REGION`，避免把真实表单误判为加载白屏。当前这套清洗在 finalize 阶段兜底执行，目标是进一步前移并复用到 Agent 粗剪和 preview。
+
+人工 run 的精剪产物包括：`edit/fine-edit-rules.snapshot.json`、`edit/edit-plan.fine.vNN.json`、`reports/fine-edit-quality.json`、`reports/final-verification.json` 和 `final-timeline.json`。

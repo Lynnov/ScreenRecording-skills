@@ -48,6 +48,7 @@
 ### Completed
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| completed/manual-recording-balanced-fine-editing.md | 人工录制 TTS 后平衡精剪：重复输入收口、误操作等待 5 倍、空白删除、质量警告和受控自进化 | 2026-08-03 |
 | completed/manual-recording-agent-editing-productization.md | 人工录制与 Agent 辅助剪辑完整产品链路 | 2026-07-29 |
 | completed/manual-recording-product-capture-runtime-remediation.md | 人工录制正式 Capture Runtime 回补：Electron capture session、overlay/controller bridge、record/pickup 默认产品路径 | 2026-07-29 |
 | completed/manual-recording-infrastructure-pocs.md | 人工录制 + Agent 辅助剪辑第一阶段：Windows 窗口捕获、统一时钟、页面事件/虚拟鼠标、多源 preview 四个基础 POC | 2026-07-28 |

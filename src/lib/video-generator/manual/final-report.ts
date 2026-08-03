@@ -14,7 +14,13 @@ import { renderFinalTimelineSrt } from '../subtitles.js';
 import { createAliyunTtsProvider } from '../tts/aliyun.js';
 import type { TtsProvider, TtsResult } from '../tts/types.js';
 import { writeAtomicJson } from './atomic-writer.js';
-import { createManualBundle, ensureManualBundleDirs } from './bundle.js';
+import { createManualBundle, ensureManualBundleDirs, writeVersionedJson } from './bundle.js';
+import { detectWhiteScreenIntervals } from './fine-edit-blank.js';
+import { readSourceEvents, type FineEditEvent, type FineEditWarning } from './fine-edit-events.js';
+import { buildFineEditLearningCandidate, persistFineEditLearningCandidate } from './fine-edit-learning.js';
+import { buildFineEditPlan, type TimeInterval } from './fine-edit-plan.js';
+import { evaluateFineEditQuality, type FineEditQualityReport } from './fine-edit-quality.js';
+import { loadFineEditRules } from './fine-edit-rules.js';
 import { buildFinalTimeline, type FinalTimeline } from './final-timeline.js';
 import { parseNarrationMarkdown, type ApprovedNarrationPointer } from './narration-response.js';
 import { resolvePathInsideRun } from './run-path.js';
@@ -24,10 +30,17 @@ import { availableManualSources, type ManualSourceCatalog } from './types.js';
 export interface ManualFinalReport {
   version: 1;
   ok: boolean;
+  renderOk?: boolean;
   runDir: string;
   finalTimelinePath?: string;
   subtitlesPath?: string;
   finalVideoPath?: string;
+  fineEditRulesSnapshotPath?: string;
+  fineEditPlanPath?: string;
+  fineEditQualityPath?: string;
+  fineEditLearningCandidatePath?: string;
+  quality?: Pick<FineEditQualityReport, 'status' | 'warnings' | 'requiredEventCoverage'>;
+  cleanupErrors: string[];
   errorMessage?: string;
   failedSegmentId?: string;
   probe?: ProbedFinalVideo;
@@ -121,8 +134,72 @@ export async function finalizeManualRecording(input: {
       }));
     }
     failedSegmentId = undefined;
-    const timeline = buildFinalTimeline({
+    const loadedRules = await loadFineEditRules({ runDir: input.runDir });
+    await writeAtomicJson(bundle.fineEditRulesSnapshotPath, {
+      ...loadedRules.rules,
+      source: loadedRules.source,
+      diagnostics: loadedRules.diagnostics,
+    });
+    const sources = availableManualSources(loaded.catalog);
+    const eventsBySource = new Map<string, FineEditEvent[]>();
+    const blankIntervalsBySource = new Map<string, TimeInterval[]>();
+    const discoveryWarnings: FineEditWarning[] = loadedRules.diagnostics.map((message) => ({
+      code: 'AMBIGUOUS_BLANK_REGION',
+      message,
+    }));
+    for (const source of sources) {
+      try {
+        eventsBySource.set(source.id, await readSourceEvents(input.runDir, source.id, source.kind));
+      } catch (error) {
+        eventsBySource.set(source.id, []);
+        discoveryWarnings.push({
+          code: 'AMBIGUOUS_INPUT_TARGET',
+          message: `Event evidence unavailable for ${source.id}; source content was preserved conservatively: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+      try {
+        blankIntervalsBySource.set(source.id, await detectWhiteScreenIntervals({
+          sourcePath: resolvePathInsideRun(input.runDir, source.path, `Source ${source.id}`),
+          whiteFrameRatio: loadedRules.rules.soft.whiteFrameRatio,
+        }));
+      } catch (error) {
+        blankIntervalsBySource.set(source.id, []);
+        discoveryWarnings.push({
+          code: 'AMBIGUOUS_BLANK_REGION',
+          message: `Blank-screen evidence unavailable for ${source.id}; no frames were deleted on that basis: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+    const audioDurationBySegment = new Map(audioResults.map((result) => [result.segmentId, result.durationMs]));
+    const fineResult = buildFineEditPlan({
       effectivePlan: loaded.plan,
+      eventsBySource,
+      audioDurationBySegment,
+      blankIntervalsBySource,
+      rules: loadedRules.rules,
+    });
+    fineResult.warnings.push(...discoveryWarnings);
+    validateEditPlan(fineResult.plan, sources);
+    const quality = evaluateFineEditQuality({
+      beforePlan: loaded.plan,
+      fineResult,
+      audioDurationBySegment,
+      rules: loadedRules.rules,
+    });
+    await writeAtomicJson(bundle.fineEditQualityPath, quality);
+    if (quality.status === 'failed') {
+      throw new Error(`Fine edit quality failed: ${quality.hardFailures.map((failure) => failure.message).join('; ')}`);
+    }
+    const finePlanArtifact = await writeVersionedJson(bundle.editDir, 'edit-plan.fine', fineResult.plan);
+    await writeAtomicJson(bundle.fineEditCurrentPlanPath, { version: 1, path: finePlanArtifact.path });
+    const learningCandidate = buildFineEditLearningCandidate({ rules: loadedRules.rules, quality, runDir: input.runDir });
+    await persistFineEditLearningCandidate({
+      candidate: learningCandidate,
+      candidatePath: bundle.fineEditLearningCandidatePath,
+      learningDir: loadedRules.learningDir,
+    });
+    const timeline = buildFinalTimeline({
+      effectivePlan: fineResult.plan,
       narration: loaded.narration.map((segment, index) => ({
         ...segment,
         estimatedDurationMs: audioResults[index]!.durationMs,
@@ -144,8 +221,8 @@ export async function finalizeManualRecording(input: {
     });
     await rm(bundle.finalVideoPath, { force: true });
     await (input.deps?.renderManualFinalVideo ?? renderManualFinalVideo)({
-      plan: planWithFinalHolds(loaded.plan, timeline),
-      sources: availableManualSources(loaded.catalog),
+      plan: planWithFinalHolds(fineResult.plan, timeline),
+      sources,
       audioPath: narrationAudioPath,
       subtitlesPath: bundle.subtitlesPath,
       outputPath: bundle.finalVideoPath,
@@ -160,11 +237,22 @@ export async function finalizeManualRecording(input: {
     const report: ManualFinalReport = {
       version: 1,
       ok: true,
+      renderOk: true,
       runDir: input.runDir,
       finalTimelinePath: bundle.finalTimelinePath,
       subtitlesPath: bundle.subtitlesPath,
       finalVideoPath: bundle.finalVideoPath,
+      fineEditRulesSnapshotPath: bundle.fineEditRulesSnapshotPath,
+      fineEditPlanPath: finePlanArtifact.path,
+      fineEditQualityPath: bundle.fineEditQualityPath,
+      fineEditLearningCandidatePath: bundle.fineEditLearningCandidatePath,
+      quality: {
+        status: quality.status,
+        warnings: quality.warnings,
+        requiredEventCoverage: quality.requiredEventCoverage,
+      },
       probe,
+      cleanupErrors: [],
     };
     await writeAtomicJson(bundle.reportPath('final-verification'), report);
     return report;
@@ -176,6 +264,7 @@ export async function finalizeManualRecording(input: {
       runDir: input.runDir,
       failedSegmentId,
       errorMessage: redactSecret(error instanceof Error ? error.message : String(error), env.DASHSCOPE_API_KEY),
+      cleanupErrors: [],
     };
     await writeAtomicJson(bundle.reportPath('final-verification'), report);
     return report;

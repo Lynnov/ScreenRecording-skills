@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "hard": {
+    "keepRequiredEvents": true,
+    "shortWaitMaxMs": 1000,
+    "mistakeWaitMaxMs": 3000,
+    "mistakeWaitPlaybackRate": 5,
+    "normalIdleMaxPlaybackRate": 2
+  },
+  "soft": {
+    "actionPreRollMs": 500,
+    "actionPostRollMs": 500,
+    "narrationTailMs": 1000,
+    "resultReactionMs": 1000,
+    "maxSilentTailMs": 2000,
+    "fadeMs": 120,
+    "whiteFrameRatio": 0.92
+  },
+  "evolution": {
+    "enabled": true,
+    "maxAdjustmentRatio": 0.1,
+    "promoteOnlyPassed": true
+  }
+}

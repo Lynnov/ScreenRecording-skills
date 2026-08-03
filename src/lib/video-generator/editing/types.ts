@@ -16,11 +16,16 @@ export interface EditSource {
   hasAudio: boolean;
 }
 
+export type FineEditClipKind = 'context' | 'action' | 'result' | 'idle' | 'mistake-wait';
+
 export interface EditClip {
   sourceId: string;
   sourceStartMs: number;
   sourceEndMs: number;
   playbackRate: number;
+  clipKind?: FineEditClipKind;
+  evidenceEventIds?: string[];
+  reason?: string;
 }
 
 export interface EditPlanSegment {

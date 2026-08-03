@@ -24,6 +24,10 @@ export interface ManualBundle {
   sourceCatalogPath: string;
   agentCurrentPlanPath: string;
   effectiveCurrentPlanPath: string;
+  fineEditRulesSnapshotPath: string;
+  fineEditCurrentPlanPath: string;
+  fineEditQualityPath: string;
+  fineEditLearningCandidatePath: string;
   reviewCurrentPath: string;
   previewTimelinePath: string;
   previewVideoPath: string;
@@ -32,7 +36,7 @@ export interface ManualBundle {
   finalVideoPath: string;
   versionedScriptPath(kind: 'polished' | 'executable' | 'recording-guide' | 'narration-final', version: number): string;
   versionedAgentPath(kind: 'guide-request' | 'guide-response' | 'edit-request' | 'edit-response' | 'narration-request' | 'narration-response', version: number): string;
-  versionedEditPath(kind: 'edit-plan.agent' | 'edit-plan.effective' | 'edit-review' | 'edit-report.agent', version: number): string;
+  versionedEditPath(kind: 'edit-plan.agent' | 'edit-plan.effective' | 'edit-plan.fine' | 'edit-review' | 'edit-report.agent', version: number): string;
   pickupPath(segmentId: string, attempt: number): string;
   audioSegmentPath(segmentId: string): string;
   reportPath(name: string): string;
@@ -86,6 +90,10 @@ export function createManualBundle(rootDir: string): ManualBundle {
     sourceCatalogPath: path.join(captureDir, 'source-catalog.json'),
     agentCurrentPlanPath: path.join(editDir, 'edit-plan.agent.current.json'),
     effectiveCurrentPlanPath: path.join(editDir, 'edit-plan.effective.current.json'),
+    fineEditRulesSnapshotPath: path.join(editDir, 'fine-edit-rules.snapshot.json'),
+    fineEditCurrentPlanPath: path.join(editDir, 'edit-plan.fine.current.json'),
+    fineEditQualityPath: path.join(reportsDir, 'fine-edit-quality.json'),
+    fineEditLearningCandidatePath: path.join(reportsDir, 'fine-edit-learning-candidate.json'),
     reviewCurrentPath: path.join(editDir, 'edit-review.current.json'),
     previewTimelinePath: path.join(editDir, 'preview-timeline.json'),
     previewVideoPath: path.join(editDir, 'preview.mp4'),

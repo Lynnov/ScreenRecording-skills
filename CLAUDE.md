@@ -119,3 +119,9 @@
 - `docs/future/` — 暂未排期的方向和想法。
 
 **检索前先读对应目录的 README.md；增删文件后更新索引。**
+
+## 人工录制产品路径
+
+人工录制完成后，Agent effective plan 仍是审核边界；真实 TTS 之后生成 fine plan 并 finalize。精剪优先删除坏帧、高置信度白屏和无意义加载，`navigation` 不能保护整段白屏；包含真实用户操作的白屏候选则保留并告警。重复输入只保留最后一次有效输入，warning final 仍必须满足媒体可播放、必需事件覆盖率 100% 和 `cleanupErrors=[]`。
+
+当前实现先在 finalize 阶段执行媒体清洗，后续将同一清洗层前移到粗剪/preview，使人工审核面对的是已清洗素材。相关规则和验收记录见 `docs/research/manual-recording-balanced-fine-editing-design.md`。

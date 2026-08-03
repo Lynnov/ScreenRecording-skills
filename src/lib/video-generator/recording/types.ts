@@ -9,6 +9,9 @@ export interface RecordingEvent extends RecordingTimestamp {
   type: string;
   tabId?: string;
   payload?: Record<string, unknown>;
+  url?: string;
+  frameUrl?: string;
+  target?: Record<string, unknown>;
 }
 
 export interface CaptureClockSample extends RecordingTimestamp {

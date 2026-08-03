@@ -169,10 +169,18 @@ test('final stage verifier preserves the finalize report and writes a separate s
     writeFile(bundle.reportPath('final-verification'), JSON.stringify({
       version: 1,
       ok: true,
+      renderOk: true,
       runDir,
       finalVideoPath: bundle.finalVideoPath,
+      fineEditRulesSnapshotPath: bundle.fineEditRulesSnapshotPath,
+      fineEditPlanPath: bundle.versionedEditPath('edit-plan.fine', 1),
+      fineEditQualityPath: bundle.fineEditQualityPath,
+      quality: { status: 'warning', warnings: [{ code: 'LONG_ACTION_AFTER_NARRATION', message: 'long action' }] },
       probe: { durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' },
     })),
+    writeFile(bundle.fineEditRulesSnapshotPath, JSON.stringify({ version: 1 })),
+    writeFile(bundle.versionedEditPath('edit-plan.fine', 1), JSON.stringify({ version: 1, segments: [] })),
+    writeFile(bundle.fineEditQualityPath, JSON.stringify({ version: 1, status: 'warning' })),
   ]);
 
   const report = await verifyManualStage({
@@ -186,4 +194,24 @@ test('final stage verifier preserves the finalize report and writes a separate s
   assert.equal(finalizeReport.stage, undefined);
   const stageReport = JSON.parse(await readFile(bundle.reportPath('final-stage-verification'), 'utf8')) as { stage: string; ok: boolean };
   assert.deepEqual({ stage: stageReport.stage, ok: stageReport.ok }, { stage: 'final', ok: true });
+});
+
+test('final stage verifier rejects a successful render report without fine-edit quality evidence', async () => {
+  const runDir = await createGuideRun();
+  const bundle = createManualBundle(runDir);
+  await Promise.all([
+    writeFile(bundle.finalTimelinePath, JSON.stringify({ version: 1, durationMs: 1000, segments: [] })),
+    writeFile(bundle.subtitlesPath, 'subtitle'),
+    writeFile(bundle.finalVideoPath, 'final-video'),
+    writeFile(bundle.reportPath('final-verification'), JSON.stringify({ version: 1, ok: true, renderOk: true, runDir })),
+  ]);
+
+  const report = await verifyManualStage({
+    runDir,
+    stage: 'final',
+    probeMedia: async () => ({ durationMs: 1000, width: 1920, height: 1080, fps: 30, codecName: 'h264' }),
+  });
+
+  assert.equal(report.ok, false);
+  assert.match(report.errors.join('\n'), /quality|fine.edit/i);
 });
