@@ -2,10 +2,11 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createManualBundle } from '../manual/bundle.js';
 import { createEditReviewDraft, validateEditReview, saveReviewedEffectivePlan, type EditReview } from '../manual/review.js';
+import { resolvePathInsideRun } from '../manual/run-path.js';
 import { validateManualSourceCatalog } from '../manual/schema.js';
 import type { EditPlan } from '../editing/types.js';
 import { REVIEW_UI_CHANNELS } from './ipc.js';
@@ -16,19 +17,16 @@ function moduleDir(): string {
   return path.dirname(fileURLToPath(import.meta.url));
 }
 
-export function assertPathInsideRun(targetPath: string, rootDir: string): void {
-  const relative = path.relative(rootDir, targetPath);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error(`Path is outside run directory: ${targetPath}`);
-  }
+export function assertPathInsideRun(targetPath: string, rootDir: string): string {
+  return resolvePathInsideRun(rootDir, targetPath, 'Review input');
 }
 
 async function loadCurrentReviewOrDraft(rootDir: string, agentPlan: EditPlan): Promise<EditReview> {
   const bundle = createManualBundle(rootDir);
   try {
     const pointer = JSON.parse(await readFile(bundle.reviewCurrentPath, 'utf8')) as { path: string };
-    assertPathInsideRun(pointer.path, rootDir);
-    const review = JSON.parse(await readFile(pointer.path, 'utf8')) as EditReview;
+    const reviewPath = assertPathInsideRun(pointer.path, rootDir);
+    const review = JSON.parse(await readFile(reviewPath, 'utf8')) as EditReview;
     validateEditReview(review, agentPlan);
     return review;
   } catch (error) {
@@ -41,14 +39,14 @@ async function loadCurrentReviewOrDraft(rootDir: string, agentPlan: EditPlan): P
 export async function loadReviewBundle(rootDir: string) {
   const bundle = createManualBundle(rootDir);
   const pointer = JSON.parse(await readFile(bundle.agentCurrentPlanPath, 'utf8')) as { path: string };
-  assertPathInsideRun(pointer.path, rootDir);
-  const agentPlan = JSON.parse(await readFile(pointer.path, 'utf8')) as EditPlan;
-  assertPathInsideRun(bundle.previewVideoPath, rootDir);
+  const agentPlanPath = assertPathInsideRun(pointer.path, rootDir);
+  const agentPlan = JSON.parse(await readFile(agentPlanPath, 'utf8')) as EditPlan;
+  const previewVideoPath = assertPathInsideRun(bundle.previewVideoPath, rootDir);
   const previewTimeline = JSON.parse(await readFile(bundle.previewTimelinePath, 'utf8'));
   const sourceCatalog = JSON.parse(await readFile(bundle.sourceCatalogPath, 'utf8'));
   validateManualSourceCatalog(sourceCatalog);
   const reviewDraft = await loadCurrentReviewOrDraft(rootDir, agentPlan);
-  return { agentPlan, previewPath: bundle.previewVideoPath, previewTimeline, sourceCatalog, reviewDraft };
+  return { agentPlan, previewPath: pathToFileURL(previewVideoPath).href, previewTimeline, sourceCatalog, reviewDraft };
 }
 
 function registerIpc(rootDir: string): void {
