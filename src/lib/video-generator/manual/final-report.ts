@@ -1,4 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { mergeAudioSegments, type MergeAudioSegmentsInput } from '../audio.js';
@@ -117,6 +118,7 @@ export async function finalizeManualRecording(input: {
 }): Promise<ManualFinalReport> {
   const bundle = createManualBundle(input.runDir);
   const env = input.env ?? process.env;
+  const pendingVideoPath = path.join(input.runDir, `.final-${randomUUID()}.mp4`);
   await ensureManualBundleDirs(bundle);
   let failedSegmentId: string | undefined;
   try {
@@ -219,15 +221,14 @@ export async function finalizeManualRecording(input: {
         actualAudioDurationMs: segment.audioDurationMs,
       })),
     });
-    await rm(bundle.finalVideoPath, { force: true });
     await (input.deps?.renderManualFinalVideo ?? renderManualFinalVideo)({
       plan: planWithFinalHolds(fineResult.plan, timeline),
       sources,
       audioPath: narrationAudioPath,
       subtitlesPath: bundle.subtitlesPath,
-      outputPath: bundle.finalVideoPath,
+      outputPath: pendingVideoPath,
     });
-    const probe = await (input.deps?.probeFinalVideo ?? probeFinalVideo)(bundle.finalVideoPath);
+    const probe = await (input.deps?.probeFinalVideo ?? probeFinalVideo)(pendingVideoPath);
     if (probe.width !== 1920 || probe.height !== 1080 || Math.abs(probe.fps - 30) > 0.001 || probe.codecName !== 'h264') {
       throw new Error(`ffprobe rejected final video metadata: ${JSON.stringify(probe)}`);
     }
@@ -255,16 +256,23 @@ export async function finalizeManualRecording(input: {
       cleanupErrors: [],
     };
     await writeAtomicJson(bundle.reportPath('final-verification'), report);
+    // Publish last: rendering, probing or report failures must leave the old video intact.
+    await rename(pendingVideoPath, bundle.finalVideoPath);
     return report;
   } catch (error) {
-    await rm(bundle.finalVideoPath, { force: true });
+    const cleanupErrors: string[] = [];
+    try {
+      await rm(pendingVideoPath, { force: true });
+    } catch (cleanupError) {
+      cleanupErrors.push(redactSecret(cleanupError instanceof Error ? cleanupError.message : String(cleanupError), env.DASHSCOPE_API_KEY));
+    }
     const report: ManualFinalReport = {
       version: 1,
       ok: false,
       runDir: input.runDir,
       failedSegmentId,
       errorMessage: redactSecret(error instanceof Error ? error.message : String(error), env.DASHSCOPE_API_KEY),
-      cleanupErrors: [],
+      cleanupErrors,
     };
     await writeAtomicJson(bundle.reportPath('final-verification'), report);
     return report;

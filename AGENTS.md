@@ -1,8 +1,24 @@
 # AGENTS.md
 
-脚本驱动网页教程视频生成器 — Codex 协作规则，基于 TypeScript + Playwright + 阿里云 TTS + ffmpeg 的本地 CLI 工具。
+脚本驱动网页教程视频生成器 — 项目统一协作规则，适用于 Codex、Claude Code 及其他 coding agent。
 
 > 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含规则和流程。
+
+## 规则维护与沟通
+
+- 项目协作规则统一维护在本文件；根目录及 `docs/` 下的 `CLAUDE.md` 仅保留兼容指引，不再分别维护同一套规则。
+- 与用户沟通时称呼用户为“小花”。
+
+## 项目定位
+
+本项目是以本地 CLI 为主的网页教程视频工具，基于 TypeScript、Playwright、阿里云 TTS 和 ffmpeg，输出旁白、字幕与 `final.mp4`。
+
+- 自动模式：Markdown 脚本驱动浏览器打开页面、点击、填写、选择、等待并录制。
+- 人工模式：操作指引、人工录制、Agent 辅助剪辑、预览审核、补录、旁白和最终合成；已有 Electron 录制浮层与审核窗口。
+- 自动模式入口：`src/cli/video-generator.ts`；人工模式入口：`src/cli/manual-*.ts`。
+- 核心流水线：`src/lib/video-generator/`。
+- 示例脚本：`examples/video-generator/`、`examples/manual-recording/`。
+- 默认输出目录：`video-runs/`。
 
 ## 开发规则
 
@@ -94,6 +110,15 @@
 - `docs/future/` — 暂未排期的方向和想法
 
 **检索前先读对应目录的 README.md；增删文件后更新索引。**
+
+### 新功能与大迭代的文档要求
+
+完成新功能或大迭代时，必须同步提供以下两份文档：
+
+1. **技术交接文档**：放在 `docs/handover/`，面向接手的开发者。说明目录结构、数据流、核心类型、脚本语法、录制流程、输出素材和关键设计决策；涉及 Playwright、TTS、ffmpeg 或候选匹配策略时，列出能力边界和失败模式。
+2. **产品思考文档**：放在 `docs/insights/`，面向产品决策者。说明解决的用户问题、方案取舍、脚本使用体验、失败可诊断性、适用场景和已知局限。
+
+两份文档使用相同文件名，并在开头互相链接：交接文档链接 `../insights/<同名文件>.md`，产品文档链接 `../handover/<同名文件>.md`。同时更新各自目录的 README 索引。
 
 ## 人工录制产品验证
 

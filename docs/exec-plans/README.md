@@ -27,6 +27,11 @@
 （目标、技术方案、拆分步骤、依赖项、验收标准）
 ```
 ## 索引
+### 技术债务
+| 文件 | 主题 | 状态 |
+|------|------|------|
+| [tech-debt-tracker.md](./tech-debt-tracker.md) | 已复现的可靠性问题：重生成保留旧成片、人工 finalize 配置加载一致性 | 两项已修复并验证 |
+
 ### Active
 | 文件 | 主题 | 状态 |
 |------|------|------|
@@ -48,6 +53,7 @@
 ### Completed
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| completed/manual-finalize-failure-safety.md | 人工生成失败保护、项目 .env 加载及回归验证 | 2026-11-12 |
 | completed/manual-recording-balanced-fine-editing.md | 人工录制 TTS 后平衡精剪：重复输入收口、误操作等待 5 倍、空白删除、质量警告和受控自进化 | 2026-08-03 |
 | completed/manual-recording-agent-editing-productization.md | 人工录制与 Agent 辅助剪辑完整产品链路 | 2026-07-29 |
 | completed/manual-recording-product-capture-runtime-remediation.md | 人工录制正式 Capture Runtime 回补：Electron capture session、overlay/controller bridge、record/pickup 默认产品路径 | 2026-07-29 |

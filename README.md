@@ -2,7 +2,7 @@
 
 > 把 Markdown 操作脚本转换成网页教程视频：自动打开网页、点击、填写、等待结果，生成旁白、字幕和 `final.mp4`。
 
-这个项目当前是一个本地轻量工具，适合先通过 Claude Code、Codex 等 coding agent 代为检查环境和运行命令。不做桌面 UI，也不要求试用者自己熟悉命令行。
+这个项目当前是一个以本地 CLI 为主的轻量工具，人工录制提供操作浮层和审核窗口。适合先通过 Codex、Claude Code 等 coding agent 代为检查环境和运行命令，不要求试用者自己熟悉命令行。
 
 ## 适合做什么
 
@@ -27,7 +27,7 @@
 ```text
 我是代码小白，请你帮我试用这个项目。不要让我手动输入命令，请你自己执行需要的检查、安装、配置和生成命令。
 
-请先阅读 README.md、CLAUDE.md、package.json 和 examples/video-generator/README.md，理解这个项目如何运行。
+请先阅读 README.md、AGENTS.md、package.json 和 examples/video-generator/README.md，理解这个项目如何运行。
 
 请先自动检查项目运行环境，包括：
 - Node.js 和 npm 是否可用；

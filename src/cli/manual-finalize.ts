@@ -1,10 +1,19 @@
 import { fileURLToPath } from 'node:url';
 
+import { loadProjectEnv } from '../lib/video-generator/env.js';
 import { finalizeManualRecording } from '../lib/video-generator/manual/final-report.js';
+
+export interface ManualFinalizeCliIo {
+  stdout?: (message: string) => void;
+  stderr?: (message: string) => void;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  finalize?: typeof finalizeManualRecording;
+}
 
 export async function runManualFinalizeCli(
   argv: string[],
-  io: { stdout?: (message: string) => void; stderr?: (message: string) => void } = {},
+  io: ManualFinalizeCliIo = {},
 ): Promise<number> {
   const stdout = io.stdout ?? console.log;
   const stderr = io.stderr ?? console.error;
@@ -12,7 +21,8 @@ export async function runManualFinalizeCli(
     stderr('Usage: video:finalize -- --run <run-dir>');
     return 1;
   }
-  const report = await finalizeManualRecording({ runDir: argv[1]! });
+  const env = await loadProjectEnv(io.cwd, io.env);
+  const report = await (io.finalize ?? finalizeManualRecording)({ runDir: argv[1]!, env });
   if (!report.ok) {
     stderr(`Manual finalize failed.\n${report.errorMessage ?? 'Unknown error'}`);
     return 1;

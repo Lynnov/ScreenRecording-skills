@@ -52,3 +52,11 @@ video:guide → video:record → video:analyze → video:preview
 ```
 
 每阶段可使用 `npm run verify:manual -- --run <run> --stage <stage>` 生成结构化校验报告。
+
+## 生成配置与重试
+
+请从项目根目录运行 `video:finalize`。命令读取当前工作目录的 `.env`，其中可配置 `DASHSCOPE_API_KEY` 和 `ALIYUN_TTS_*`；同名进程环境变量优先于文件配置。
+
+生成时先写入同目录临时视频，通过媒体校验并写入报告后才替换 `final.mp4`。配置、配音、渲染或校验失败时，已有成片保持不变，本次临时视频会尝试清理。
+
+请以本次命令退出码和 `reports/final-verification.json` 判断是否成功：失败后仍存在的 `final.mp4` 是上一版，并不代表本次生成成功。本机制保护视频文件，不提供音频、字幕、时间线和报告的整套历史版本回退。

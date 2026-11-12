@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -15,11 +15,13 @@ import { runManualRecordController } from '../../src/lib/video-generator/manual/
 import { createEditReviewDraft, saveReviewedEffectivePlan } from '../../src/lib/video-generator/manual/review.js';
 import { verifyManualStage } from '../../src/lib/video-generator/manual/verifiers.js';
 import { runManualPreviewCli } from '../../src/cli/manual-preview.js';
+import { runManualFinalizeCli } from '../../src/cli/manual-finalize.js';
 
 const run = promisify(execFile);
 
-test('manual product runs guide through real ffmpeg final without desktop interaction', { timeout: 120_000 }, async () => {
+test('manual product runs guide through real ffmpeg final using .env and preserves the video on failed retry', { timeout: 120_000 }, async (t) => {
   const runDir = await mkdtemp(path.join(tmpdir(), 'manual-e2e-'));
+  t.after(() => rm(runDir, { recursive: true, force: true }));
   const bundle = createManualBundle(runDir);
   const scriptPath = path.join(runDir, 'source.md');
   await writeFile(scriptPath, '# Save settings\n');
@@ -88,20 +90,39 @@ test('manual product runs guide through real ffmpeg final without desktop intera
   }));
   await applyNarrationAgentResponse({ runDir, responsePath: narrationResponsePath });
   await approveNarrationVersion({ runDir, version: 1 });
-  const finalReport = await finalizeManualRecording({
-    runDir,
-    env: { DASHSCOPE_API_KEY: 'fixture-key' },
-    deps: {
-      ttsProvider: {
-        synthesize: async ({ segmentId, outputPath }) => {
-          await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-ar', '24000', '-ac', '1', '-y', outputPath]);
-          return { segmentId, audioPath: outputPath, durationMs: 1000 };
+  await writeFile(path.join(runDir, '.env'), 'DASHSCOPE_API_KEY=fixture-key\n');
+  const messages: string[] = [];
+  const finalize = () => runManualFinalizeCli(['--run', runDir], {
+    cwd: runDir,
+    env: {},
+    stdout: (message) => messages.push(message),
+    stderr: (message) => messages.push(message),
+    finalize: (input) => finalizeManualRecording({
+      ...input,
+      deps: {
+        ttsProvider: {
+          synthesize: async ({ segmentId, outputPath }) => {
+            await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-ar', '24000', '-ac', '1', '-y', outputPath]);
+            return { segmentId, audioPath: outputPath, durationMs: 1000 };
+          },
         },
       },
-    },
+    }),
   });
-  assert.equal(finalReport.ok, true, finalReport.errorMessage);
+  assert.equal(await finalize(), 0, messages.join('\n'));
   assert.equal((await verifyManualStage({ runDir, stage: 'final' })).ok, true);
   await access(bundle.finalVideoPath);
   assert.match(await readFile(bundle.subtitlesPath, 'utf8'), /Save settings/);
+  assert.doesNotMatch(messages.join('\n'), /fixture-key/);
+
+  const previousVideo = await readFile(bundle.finalVideoPath);
+  const failedRetry = await finalizeManualRecording({ runDir, env: {} });
+  assert.equal(failedRetry.ok, false);
+  assert.match(failedRetry.errorMessage ?? '', /DASHSCOPE_API_KEY/);
+  assert.deepEqual(await readFile(bundle.finalVideoPath), previousVideo);
+  await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', bundle.finalVideoPath, '-f', 'null', '-']);
+
+  assert.equal(await finalize(), 0, messages.join('\n'));
+  assert.equal((await verifyManualStage({ runDir, stage: 'final' })).ok, true);
+  assert.deepEqual((await readdir(runDir)).filter((name) => name.endsWith('.mp4')), ['final.mp4']);
 });
